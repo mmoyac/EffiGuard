@@ -7,7 +7,7 @@ from app.services import menu as menu_service
 router = APIRouter(prefix="/menu", tags=["Menu"])
 
 
-@router.get("/", response_model=list[MenuItemResponse])
+@router.get("", response_model=list[MenuItemResponse])
 async def get_menu(token: CurrentToken, session: DBSession):
     """
     Retorna el menú de navegación para el rol del usuario autenticado.
