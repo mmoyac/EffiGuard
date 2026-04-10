@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ScanLine, X, CheckCircle, AlertCircle, Keyboard } from "lucide-react";
 import { useHIDScanner } from "../hooks/useHIDScanner";
 import { ScanResult } from "../components/scanner/ScanResult";

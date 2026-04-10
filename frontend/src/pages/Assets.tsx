@@ -77,11 +77,6 @@ export function Assets() {
   );
 
   // Filtrar modelos por marca seleccionada
-  const filteredModels = assetForm.model_id === 0
-    ? models
-    : models.filter((m) => m.brand_id === Number(
-        models.find((x) => x.id === Number(assetForm.model_id))?.brand_id ?? 0
-      ));
 
   return (
     <div className="space-y-4">
@@ -197,7 +192,7 @@ export function Assets() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {assets.map((a) => <AssetCard key={a.id} asset={a} states={states} models={models} brands={brands} />)}
+              {assets.map((a) => <AssetCard key={a.id} asset={a} models={models} brands={brands} />)}
             </div>
           )}
         </>
@@ -217,8 +212,8 @@ export function Assets() {
   );
 }
 
-function AssetCard({ asset, states, models, brands }: {
-  asset: Asset; states: State[]; models: AssetModel[]; brands: Brand[];
+function AssetCard({ asset, models, brands }: {
+  asset: Asset; models: AssetModel[]; brands: Brand[];
 }) {
   const [expanded, setExpanded] = useState(false);
   const estado = ESTADO[asset.estado_id] ?? { label: "Desconocido", color: "text-gray-400 bg-gray-800 border-gray-700" };

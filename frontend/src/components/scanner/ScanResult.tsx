@@ -130,7 +130,7 @@ export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Pr
 }
 
 function ActionButton({
-  action, activeLoan, onAction,
+  action, activeLoan: _activeLoan, onAction,
 }: {
   action: ActionType;
   activeLoan: Loan | null;

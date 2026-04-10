@@ -80,7 +80,7 @@ export function LoanModal({ asset, kitChildren = [], onConfirm, onClose }: Props
               {users
                 .filter((u) => u.role_id !== 1) // excluir super_admin
                 .map((u) => (
-                  <option key={u.id} value={u.id}>{u.nombre} — {u.rut ?? ""}</option>
+                  <option key={u.id} value={u.id}>{u.nombre}</option>
                 ))}
             </select>
           </div>

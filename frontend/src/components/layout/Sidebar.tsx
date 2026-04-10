@@ -22,7 +22,7 @@ function NavItem({
 }) {
   const [open, setOpen] = useState(true);
   const isGroup = !item.ruta && item.children.length > 0;
-  const Icon = (Icons as Record<string, React.ComponentType<{ size?: number }>>)[
+  const Icon = (Icons as unknown as Record<string, React.ComponentType<{ size?: number }>>)[
     item.icono ?? "Circle"
   ];
 
