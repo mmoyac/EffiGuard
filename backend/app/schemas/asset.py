@@ -1,0 +1,51 @@
+from datetime import date, datetime
+from decimal import Decimal
+
+from pydantic import BaseModel
+
+
+class AssetCreate(BaseModel):
+    uid_fisico: str
+    model_id: int
+    tipo: str  # herramienta | consumible
+    estado_id: int
+    stock_actual: int = 0
+    stock_minimo: int = 0
+    valor_reposicion: Decimal | None = None
+    proxima_mantencion: date | None = None
+    parent_asset_id: int | None = None
+
+
+class AssetUpdate(BaseModel):
+    estado_id: int | None = None
+    stock_actual: int | None = None
+    stock_minimo: int | None = None
+    valor_reposicion: Decimal | None = None
+    proxima_mantencion: date | None = None
+
+
+class AssetResponse(BaseModel):
+    id: int
+    tenant_id: int
+    uid_fisico: str
+    parent_asset_id: int | None
+    model_id: int
+    tipo: str
+    estado_id: int
+    stock_actual: int
+    stock_minimo: int
+    valor_reposicion: Decimal | None
+    proxima_mantencion: date | None
+    created_at: datetime
+    children: list["AssetResponse"] = []
+
+    model_config = {"from_attributes": True}
+
+
+AssetResponse.model_rebuild()
+
+
+class ConsumableWithdraw(BaseModel):
+    asset_id: int
+    cantidad: int
+    observaciones: str | None = None

@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tamaño táctil mínimo 48px — UX industrial */
+@layer base {
+  button, a, [role="button"] {
+    @apply min-h-[48px] min-w-[48px];
+  }
+}

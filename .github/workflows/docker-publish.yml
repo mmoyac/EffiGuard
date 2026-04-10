@@ -1,0 +1,131 @@
+name: Build and Deploy EffiGuard
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+env:
+  BACKEND_IMAGE: mmoyac/effiguard-backend
+  FRONTEND_IMAGE: mmoyac/effiguard-frontend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata - Backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BACKEND_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=,format=short
+
+      - name: Extract metadata - Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=,format=short
+
+      - name: Build and push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache,mode=max
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache,mode=max
+
+  deploy-to-vps:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy docker-compose.prod.yml to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "docker-compose.prod.yml"
+          target: "/root/docker/EffiGuard/"
+          strip_components: 0
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          timeout: 30s
+          command_timeout: 10m
+          conn_timeout: 30s
+          script: |
+            echo "Iniciando despliegue de EffiGuard..."
+
+            cd /root/docker/EffiGuard
+
+            # Usar el compose de prod renombrado como docker-compose.yml
+            cp docker-compose.prod.yml docker-compose.yml
+
+            echo "Actualizando imagenes desde Docker Hub..."
+            docker compose pull backend frontend
+
+            echo "Reiniciando servicios actualizados..."
+            docker compose up -d --force-recreate backend frontend
+
+            echo "Esperando que el backend levante y ejecute migraciones..."
+            sleep 15
+
+            if docker ps | grep -q effiguard_backend && docker ps | grep -q effiguard_frontend; then
+              echo "Contenedores iniciados correctamente"
+              docker ps | grep effiguard
+            else
+              echo "ERROR: Alguno de los contenedores no esta corriendo"
+              docker compose logs --tail=50
+              exit 1
+            fi
+
+            echo "Verificando estado de migraciones..."
+            docker exec effiguard_backend alembic current
+
+            echo "Limpiando imagenes antiguas..."
+            docker image prune -f
+
+            echo "Despliegue de EffiGuard completado!"
