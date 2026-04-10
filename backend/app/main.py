@@ -12,9 +12,15 @@ app = FastAPI(
     redoc_url="/redoc" if not settings.is_production else None,
 )
 
+import re
+
+_BASE = re.escape(settings.BASE_DOMAIN)
+_CORS_REGEX = rf"^https://effiguard-[^.]+\.{_BASE}$"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if not settings.is_production else ["https://effiguard.com"],
+    allow_origins=["*"] if not settings.is_production else [],
+    allow_origin_regex=None if not settings.is_production else _CORS_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

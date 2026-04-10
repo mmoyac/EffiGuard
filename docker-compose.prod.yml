@@ -21,6 +21,12 @@ services:
       retries: 5
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
   backend:
     image: mmoyac/effiguard-backend:latest
@@ -37,6 +43,12 @@ services:
       ENVIRONMENT: production
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
 
   frontend:
     image: mmoyac/effiguard-frontend:latest
@@ -47,6 +59,63 @@ services:
     networks:
       - internal
       - general-net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  backup:
+    image: postgres:16-alpine
+    container_name: effiguard_backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    networks:
+      - internal
+    # Cron: diario a las 2am, retención 7 días
+    entrypoint: >
+      /bin/sh -c '
+        echo "Backup service iniciado"
+        while true; do
+          NOW_SECS=$$(( $$(date +%H) * 3600 + $$(date +%M) * 60 + $$(date +%S) ))
+          TARGET_SECS=7200
+          if [ $$NOW_SECS -lt $$TARGET_SECS ]; then
+            WAIT=$$((TARGET_SECS - NOW_SECS))
+          else
+            WAIT=$$((86400 - NOW_SECS + TARGET_SECS))
+          fi
+          echo "Proximo backup en $$WAIT segundos (2:00am)"
+          sleep $$WAIT
+
+          FILENAME="/backups/effiguard_$$(date +%Y-%m-%d).sql.gz"
+          echo "Ejecutando backup: $$FILENAME"
+          pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > $$FILENAME
+
+          if [ $$? -eq 0 ]; then
+            echo "Backup completado: $$FILENAME"
+          else
+            echo "ERROR: Backup fallido"
+          fi
+
+          echo "Eliminando backups con mas de 7 dias..."
+          find /backups -name "effiguard_*.sql.gz" -mtime +7 -delete
+          echo "Limpieza completada"
+        done
+      '
+    deploy:
+      resources:
+        limits:
+          memory: 64M
 
 volumes:
   postgres_data:

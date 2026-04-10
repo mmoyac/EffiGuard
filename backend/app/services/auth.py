@@ -1,22 +1,61 @@
+import re
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
     verify_password,
 )
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse
 
+# effiguard-{slug}.lexastech.cl  →  grupo 1 = slug
+_SLUG_RE = re.compile(rf"^effiguard-([^.]+)\.{re.escape(settings.BASE_DOMAIN)}(?::\d+)?$")
 
-async def login(request: LoginRequest, session: AsyncSession) -> TokenResponse:
-    # Buscar usuario por email (sin filtro tenant — el email es global)
+
+def _extract_slug(host: str) -> str | None:
+    m = _SLUG_RE.match(host)
+    return m.group(1) if m else None
+
+
+async def _resolve_tenant(slug: str, session: AsyncSession) -> Tenant:
     result = await session.execute(
-        select(User).where(User.email == request.email, User.is_active == True)
+        select(Tenant).where(Tenant.slug == slug, Tenant.is_active == True)
     )
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant no encontrado",
+        )
+    return tenant
+
+
+async def login(request: LoginRequest, session: AsyncSession, host: str = "") -> TokenResponse:
+    slug = _extract_slug(host)
+
+    if slug:
+        # Prod: resolver tenant por subdominio y filtrar usuario dentro del tenant
+        tenant = await _resolve_tenant(slug, session)
+        result = await session.execute(
+            select(User).where(
+                User.email == request.email,
+                User.tenant_id == tenant.id,
+                User.is_active == True,
+            )
+        )
+    else:
+        # Dev/local: búsqueda global por email (sin filtro tenant)
+        result = await session.execute(
+            select(User).where(User.email == request.email, User.is_active == True)
+        )
+
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(request.password, user.password_hash):
