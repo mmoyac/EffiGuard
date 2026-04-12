@@ -11,7 +11,7 @@ from app.services import loan as loan_service
 router = APIRouter(prefix="/loans", tags=["Loans"])
 
 
-@router.get("/", response_model=list[ActiveLoanResponse])
+@router.get("", response_model=list[ActiveLoanResponse])
 async def list_loans(token: CurrentToken, session: DBSession, active_only: bool = False):
     from sqlalchemy import select
     from sqlalchemy.orm import aliased
@@ -102,7 +102,7 @@ async def my_loans(token: CurrentToken, session: DBSession):
     ]
 
 
-@router.post("/", response_model=list[LoanResponse], status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=list[LoanResponse], status_code=status.HTTP_201_CREATED)
 async def create_loan(data: LoanCreate, token: CurrentToken, session: DBSession):
     """Crea préstamo de herramienta o kit completo (padre + hijos en un escaneo)."""
     return await asset_service.create_loan(data, session, token.tenant_id, token.user_id)

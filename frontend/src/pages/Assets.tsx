@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "react-query";
-import { Package, Layers, AlertTriangle, Plus, ChevronDown, ChevronUp } from "lucide-react";
+import { Package, Layers, AlertTriangle, Plus, ChevronDown, ChevronUp, Camera, Settings2, X } from "lucide-react";
 import { assetsApi, catalogApi, api } from "../services/api";
+import { CameraScanner } from "../components/scanner/CameraScanner";
 import type { Asset } from "../types";
 
 const ESTADO: Record<number, { label: string; color: string }> = {
@@ -16,21 +18,23 @@ interface AssetModel { id: number; brand_id: number; nombre: string; }
 interface State { id: number; nombre: string; }
 
 const EMPTY_ASSET = {
-  uid_fisico: "", model_id: 0, tipo: "herramienta",
+  uid_fisico: "", nombre: "", model_id: 0, tipo: "herramienta",
   estado_id: 1, stock_actual: 0, stock_minimo: 0,
   valor_reposicion: "", proxima_mantencion: "",
 };
 const EMPTY_BRAND = { nombre: "" };
 const EMPTY_MODEL = { brand_id: 0, nombre: "" };
 
-type Tab = "assets" | "catalogo";
-
 export function Assets() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>("assets");
+  const navigate = useNavigate();
+  const [showCatalog, setShowCatalog] = useState(false);
   const [showAssetForm, setShowAssetForm] = useState(false);
   const [assetForm, setAssetForm] = useState(EMPTY_ASSET);
   const [assetError, setAssetError] = useState("");
+  const [scanningUid, setScanningUid] = useState(false);
+  const [tipoSeleccionado, setTipoSeleccionado] = useState(false);
+  const uidInputRef = useRef<HTMLInputElement>(null);
 
   const [showBrandForm, setShowBrandForm] = useState(false);
   const [brandForm, setBrandForm] = useState(EMPTY_BRAND);
@@ -51,9 +55,10 @@ export function Assets() {
   );
 
   const createAsset = useMutation(
-    (d: typeof EMPTY_ASSET) => api.post("/assets/", {
+    (d: typeof EMPTY_ASSET) => api.post("/assets", {
       ...d,
-      model_id: Number(d.model_id),
+      nombre: d.nombre || null,
+      model_id: d.model_id ? Number(d.model_id) : null,
       estado_id: Number(d.estado_id),
       stock_actual: Number(d.stock_actual),
       stock_minimo: Number(d.stock_minimo),
@@ -87,82 +92,184 @@ export function Assets() {
         <span className="text-xs text-gray-500 bg-gray-800 px-2.5 py-1 rounded-full">
           {assets.length} total
         </span>
-        <button
-          onClick={() => { setShowAssetForm((v) => !v); setAssetError(""); }}
-          className="ml-auto flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl min-h-[44px] transition-colors"
-        >
-          <Plus size={16} /> Nuevo activo
-        </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-800 rounded-xl p-1">
-        {([["assets", "Activos"], ["catalogo", "Marcas y Modelos"]] as [Tab, string][]).map(([key, label]) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-colors ${
-              tab === key ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
-            }`}>
-            {label}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => { setShowCatalog((v) => !v); setShowAssetForm(false); }}
+            title="Marcas y modelos"
+            className={`p-2.5 rounded-xl border transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center ${
+              showCatalog
+                ? "bg-gray-700 border-gray-500 text-white"
+                : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500"
+            }`}
+          >
+            {showCatalog ? <X size={18} /> : <Settings2 size={18} />}
           </button>
-        ))}
+          <button
+            onClick={() => { setShowAssetForm((v) => !v); setShowCatalog(false); setAssetError(""); setTipoSeleccionado(false); setAssetForm(EMPTY_ASSET); }}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl min-h-[44px] transition-colors"
+          >
+            <Plus size={16} /> Nuevo activo
+          </button>
+        </div>
       </div>
 
-      {tab === "assets" ? (
-        <>
-          {/* Formulario nuevo activo */}
-          {showAssetForm && (
-            <form onSubmit={(e) => { e.preventDefault(); createAsset.mutate(assetForm); }}
-              className="bg-gray-800 border border-gray-700 rounded-2xl p-4 space-y-3">
-              <p className="text-sm font-semibold text-white">Nuevo activo</p>
+      {/* Panel catálogo — marcas y modelos */}
+      {showCatalog && (
+        <div className="bg-gray-800/60 border border-gray-700 rounded-2xl p-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Catálogo</p>
+          <CatalogoTab
+            brands={brands} models={models}
+            showBrandForm={showBrandForm} setShowBrandForm={setShowBrandForm}
+            brandForm={brandForm} setBrandForm={setBrandForm}
+            createBrand={createBrand}
+            showModelForm={showModelForm} setShowModelForm={setShowModelForm}
+            modelForm={modelForm} setModelForm={setModelForm}
+            createModel={createModel}
+          />
+        </div>
+      )}
+
+      {/* Formulario nuevo activo */}
+      {showAssetForm && (
+        <div className="bg-gray-800 border border-gray-700 rounded-2xl p-4 space-y-4">
+          <p className="text-sm font-semibold text-white">Nuevo activo</p>
+
+          {/* Paso 1 — selección de tipo */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-gray-400">¿Qué tipo de activo es?</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { value: "herramienta", label: "Herramienta", desc: "Se presta y devuelve", icon: <Package size={22} /> },
+                { value: "consumible", label: "Consumible", desc: "Se descuenta del stock", icon: <Layers size={22} /> },
+              ].map(({ value, label, desc, icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => { setAssetForm((f) => ({ ...f, tipo: value })); setTipoSeleccionado(true); setTimeout(() => uidInputRef.current?.focus(), 50); }}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
+                    assetForm.tipo === value && tipoSeleccionado
+                      ? value === "herramienta"
+                        ? "border-blue-500 bg-blue-900/20 text-blue-300"
+                        : "border-orange-500 bg-orange-900/20 text-orange-300"
+                      : "border-gray-700 bg-gray-700/40 text-gray-400 hover:border-gray-500 hover:text-white"
+                  }`}
+                >
+                  {icon}
+                  <span className="font-semibold text-sm">{label}</span>
+                  <span className="text-xs opacity-70 text-center leading-tight">{desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Paso 2 — campos según tipo */}
+          {tipoSeleccionado && (
+            <form onSubmit={(e) => { e.preventDefault(); createAsset.mutate(assetForm); }} className="space-y-3 pt-2 border-t border-gray-700">
               {assetError && <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 px-3 py-2 rounded-lg">{assetError}</p>}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input required placeholder="UID físico (QR / RFID)" value={assetForm.uid_fisico}
-                  onChange={(e) => setAssetForm({ ...assetForm, uid_fisico: e.target.value })}
-                  className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full sm:col-span-2" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-                <select required value={assetForm.model_id || ""}
-                  onChange={(e) => setAssetForm({ ...assetForm, model_id: Number(e.target.value) })}
-                  className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full">
-                  <option value="">Seleccionar modelo</option>
-                  {brands.map((b) => (
-                    <optgroup key={b.id} label={b.nombre}>
-                      {models.filter((m) => m.brand_id === b.id).map((m) => (
-                        <option key={m.id} value={m.id}>{m.nombre}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
+                {/* Nombre */}
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-xs font-medium text-gray-300">
+                    Nombre <span className="text-gray-500 font-normal">(opcional)</span>
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    {assetForm.tipo === "consumible" ? "Ej: Tornillo 1/2\", Cinta aislante, Pegamento PVC" : "Ej: Taladro percutor, Amoladora 9\""}
+                  </p>
+                  <input placeholder={assetForm.tipo === "consumible" ? "Nombre del consumible" : "Nombre de la herramienta"}
+                    value={assetForm.nombre}
+                    onChange={(e) => setAssetForm({ ...assetForm, nombre: e.target.value })}
+                    className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
+                </div>
 
-                <select value={assetForm.tipo} onChange={(e) => setAssetForm({ ...assetForm, tipo: e.target.value })}
-                  className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full">
-                  <option value="herramienta">Herramienta</option>
-                  <option value="consumible">Consumible</option>
-                </select>
+                {/* Código identificador */}
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-xs font-medium text-gray-300">Código identificador <span className="text-red-400">*</span></label>
+                  <p className="text-xs text-gray-500">El código QR, código de barras o tag RFID pegado físicamente en el activo</p>
+                  <div className="flex gap-2">
+                    <input ref={uidInputRef} required placeholder="Escanea o escribe el código" value={assetForm.uid_fisico}
+                      onChange={(e) => setAssetForm({ ...assetForm, uid_fisico: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+                      className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 flex-1 font-mono" />
+                    <button type="button" onClick={() => setScanningUid((v) => !v)} title="Escanear con cámara"
+                      className={`px-3 rounded-xl border transition-colors flex items-center min-h-[44px] ${scanningUid ? "bg-blue-600 border-blue-500 text-white" : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600"}`}>
+                      <Camera size={16} />
+                    </button>
+                  </div>
+                  {scanningUid && <CameraScanner active={scanningUid} onScan={(uid) => { setAssetForm((f) => ({ ...f, uid_fisico: uid })); setScanningUid(false); }} />}
+                </div>
 
-                <select required value={assetForm.estado_id}
-                  onChange={(e) => setAssetForm({ ...assetForm, estado_id: Number(e.target.value) })}
-                  className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full">
-                  {states.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                </select>
+                {/* Modelo */}
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-xs font-medium text-gray-300">
+                    Modelo {assetForm.tipo === "herramienta" ? <span className="text-red-400">*</span> : <span className="text-gray-500 font-normal">(opcional)</span>}
+                  </label>
+                  <p className="text-xs text-gray-500">Si no aparece, créalo en ⚙ Catálogo</p>
+                  <select required={assetForm.tipo === "herramienta"} value={assetForm.model_id || ""}
+                    onChange={(e) => setAssetForm({ ...assetForm, model_id: Number(e.target.value) })}
+                    className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 w-full">
+                    <option value="">Seleccionar modelo</option>
+                    {brands.map((b) => (
+                      <optgroup key={b.id} label={b.nombre}>
+                        {models.filter((m) => m.brand_id === b.id).map((m) => (
+                          <option key={m.id} value={m.id}>{m.nombre}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
 
+                {/* Estado */}
+                <div className={assetForm.tipo === "consumible" ? "sm:col-span-2 space-y-1" : "space-y-1"}>
+                  <label className="text-xs font-medium text-gray-300">Estado <span className="text-red-400">*</span></label>
+                  <p className="text-xs text-gray-500">Condición actual al ingresarlo</p>
+                  <select required value={assetForm.estado_id}
+                    onChange={(e) => setAssetForm({ ...assetForm, estado_id: Number(e.target.value) })}
+                    className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 w-full">
+                    {states.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                  </select>
+                </div>
+
+                {/* Herramienta: próxima mantención */}
+                {assetForm.tipo === "herramienta" && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-300">Próxima mantención <span className="text-gray-500 font-normal">(opcional)</span></label>
+                    <p className="text-xs text-gray-500">Fecha de revisión preventiva</p>
+                    <input type="date" value={assetForm.proxima_mantencion}
+                      onChange={(e) => setAssetForm({ ...assetForm, proxima_mantencion: e.target.value })}
+                      className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 w-full" />
+                  </div>
+                )}
+
+                {/* Consumible: stock */}
                 {assetForm.tipo === "consumible" && (
                   <>
-                    <input type="number" min="0" placeholder="Stock actual" value={assetForm.stock_actual}
-                      onChange={(e) => setAssetForm({ ...assetForm, stock_actual: Number(e.target.value) })}
-                      className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
-                    <input type="number" min="0" placeholder="Stock mínimo" value={assetForm.stock_minimo}
-                      onChange={(e) => setAssetForm({ ...assetForm, stock_minimo: Number(e.target.value) })}
-                      className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-gray-300">Cantidad actual</label>
+                      <p className="text-xs text-gray-500">Unidades en bodega hoy</p>
+                      <input type="number" min="0" placeholder="0" value={assetForm.stock_actual}
+                        onChange={(e) => setAssetForm({ ...assetForm, stock_actual: Number(e.target.value) })}
+                        className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 w-full" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-gray-300">Cantidad mínima</label>
+                      <p className="text-xs text-gray-500">Alerta si cae por debajo</p>
+                      <input type="number" min="0" placeholder="0" value={assetForm.stock_minimo}
+                        onChange={(e) => setAssetForm({ ...assetForm, stock_minimo: Number(e.target.value) })}
+                        className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 w-full" />
+                    </div>
                   </>
                 )}
 
-                <input type="number" min="0" placeholder="Valor reposición (opcional)" value={assetForm.valor_reposicion}
-                  onChange={(e) => setAssetForm({ ...assetForm, valor_reposicion: e.target.value })}
-                  className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
+                {/* Valor reposición */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-300">Valor reposición <span className="text-gray-500 font-normal">(opcional)</span></label>
+                  <p className="text-xs text-gray-500">Costo si se pierde o daña</p>
+                  <input type="number" min="0" placeholder="$0" value={assetForm.valor_reposicion}
+                    onChange={(e) => setAssetForm({ ...assetForm, valor_reposicion: e.target.value })}
+                    className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
+                </div>
 
-                <input type="date" placeholder="Próxima mantención" value={assetForm.proxima_mantencion}
-                  onChange={(e) => setAssetForm({ ...assetForm, proxima_mantencion: e.target.value })}
-                  className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
               </div>
 
               <div className="flex gap-2 pt-1">
@@ -170,13 +277,15 @@ export function Assets() {
                   className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors min-h-[44px]">
                   {createAsset.isLoading ? "Guardando..." : "Crear activo"}
                 </button>
-                <button type="button" onClick={() => { setShowAssetForm(false); setAssetError(""); setAssetForm(EMPTY_ASSET); }}
+                <button type="button" onClick={() => { setShowAssetForm(false); setAssetError(""); setAssetForm(EMPTY_ASSET); setTipoSeleccionado(false); }}
                   className="px-4 py-2.5 rounded-xl text-sm text-gray-400 hover:bg-gray-700 transition-colors min-h-[44px]">
                   Cancelar
                 </button>
               </div>
             </form>
           )}
+        </div>
+      )}
 
           {/* Lista */}
           {isLoading ? (
@@ -192,28 +301,15 @@ export function Assets() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {assets.map((a) => <AssetCard key={a.id} asset={a} models={models} brands={brands} />)}
+              {assets.map((a) => <AssetCard key={a.id} asset={a} models={models} brands={brands} onEdit={(a) => navigate(`/assets/${a.id}/edit`)} />)}
             </div>
           )}
-        </>
-      ) : (
-        /* Tab catálogo */
-        <CatalogoTab
-          brands={brands} models={models}
-          showBrandForm={showBrandForm} setShowBrandForm={setShowBrandForm}
-          brandForm={brandForm} setBrandForm={setBrandForm}
-          createBrand={createBrand}
-          showModelForm={showModelForm} setShowModelForm={setShowModelForm}
-          modelForm={modelForm} setModelForm={setModelForm}
-          createModel={createModel}
-        />
-      )}
     </div>
   );
 }
 
-function AssetCard({ asset, models, brands }: {
-  asset: Asset; models: AssetModel[]; brands: Brand[];
+function AssetCard({ asset, models, brands, onEdit }: {
+  asset: Asset; models: AssetModel[]; brands: Brand[]; onEdit: (a: Asset) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const estado = ESTADO[asset.estado_id] ?? { label: "Desconocido", color: "text-gray-400 bg-gray-800 border-gray-700" };
@@ -229,14 +325,22 @@ function AssetCard({ asset, models, brands }: {
           {isConsumable ? <Layers size={18} className="text-orange-400" /> : <Package size={18} className="text-blue-400" />}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-sm text-white font-semibold truncate">{asset.uid_fisico}</p>
-          <p className="text-xs text-gray-500 capitalize truncate">
-            {brand?.nombre} {model?.nombre ?? asset.tipo}
+          {asset.nombre && <p className="text-sm text-white font-semibold truncate">{asset.nombre}</p>}
+          <p className="font-mono text-xs text-gray-400 truncate">{asset.uid_fisico}</p>
+          <p className="text-xs text-gray-500 truncate">
+            {[brand?.nombre, model?.nombre].filter(Boolean).join(" ") || "—"} · <span className="capitalize">{asset.tipo}</span>
           </p>
         </div>
-        <span className={`flex-shrink-0 text-xs font-semibold px-2 py-1 rounded-full border ${estado.color}`}>
-          {estado.label}
-        </span>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${estado.color}`}>
+            {estado.label}
+          </span>
+          <button onClick={() => onEdit(asset)}
+            className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-gray-700 transition-colors"
+            title="Editar">
+            <Settings2 size={14} />
+          </button>
+        </div>
       </div>
 
       {isConsumable && (

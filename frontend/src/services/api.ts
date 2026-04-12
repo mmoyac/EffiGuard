@@ -54,8 +54,12 @@ export const menuApi = {
 
 export const assetsApi = {
   list: (skip = 0, limit = 50) => api.get(`/assets?skip=${skip}&limit=${limit}`),
+  getById: (id: number) => api.get(`/assets/${id}`),
   scan: (uid: string) => api.get(`/assets/scan/${uid}`),
   lowStock: () => api.get("/assets/low-stock"),
+  update: (id: number, data: object) => api.patch(`/assets/${id}`, data),
+  reportLoss: (id: number, data: object) => api.post(`/assets/${id}/loss`, data),
+  adjustStock: (id: number, data: object) => api.post(`/assets/${id}/adjust`, data),
 };
 
 export const loansApi = {

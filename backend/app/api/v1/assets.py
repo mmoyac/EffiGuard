@@ -2,19 +2,20 @@ from fastapi import APIRouter, status
 
 from app.core.dependencies import CurrentToken, DBSession
 from app.repositories.asset import AssetRepository
-from app.schemas.asset import AssetCreate, AssetResponse, AssetUpdate
+from app.schemas.asset import AssetAdjust, AssetCreate, AssetLoss, AssetResponse, AssetUpdate
+from app.schemas.inventory import InventoryLogResponse
 from app.services import asset as asset_service
 
 router = APIRouter(prefix="/assets", tags=["Assets"])
 
 
-@router.get("/", response_model=list[AssetResponse])
+@router.get("", response_model=list[AssetResponse])
 async def list_assets(token: CurrentToken, session: DBSession, skip: int = 0, limit: int = 50):
     repo = AssetRepository(session, token.tenant_id)
     return await repo.list(offset=skip, limit=limit)
 
 
-@router.post("/", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
 async def create_asset(data: AssetCreate, token: CurrentToken, session: DBSession):
     return await asset_service.create_asset(data, session, token.tenant_id)
 
@@ -44,3 +45,15 @@ async def get_asset(asset_id: int, token: CurrentToken, session: DBSession):
 @router.patch("/{asset_id}", response_model=AssetResponse)
 async def update_asset(asset_id: int, data: AssetUpdate, token: CurrentToken, session: DBSession):
     return await asset_service.update_asset(asset_id, data, session, token.tenant_id)
+
+
+@router.post("/{asset_id}/loss", response_model=InventoryLogResponse, status_code=status.HTTP_201_CREATED)
+async def report_loss(asset_id: int, data: AssetLoss, token: CurrentToken, session: DBSession):
+    """Registra pérdida o robo. Herramienta → estado Robado. Consumible → descuenta stock."""
+    return await asset_service.report_loss(asset_id, data, session, token.tenant_id, token.user_id)
+
+
+@router.post("/{asset_id}/adjust", response_model=InventoryLogResponse, status_code=status.HTTP_201_CREATED)
+async def adjust_stock(asset_id: int, data: AssetAdjust, token: CurrentToken, session: DBSession):
+    """Ajusta el stock de un consumible a un valor absoluto."""
+    return await asset_service.adjust_stock(asset_id, data, session, token.tenant_id, token.user_id)

@@ -21,13 +21,13 @@ class ProjectResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.get("/", response_model=list[ProjectResponse])
+@router.get("", response_model=list[ProjectResponse])
 async def list_projects(token: CurrentToken, session: DBSession):
     repo = BaseRepository(Project, session, token.tenant_id)
     return await repo.list()
 
 
-@router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(data: ProjectCreate, token: CurrentToken, session: DBSession):
     repo = BaseRepository(Project, session, token.tenant_id)
     return await repo.create(nombre=data.nombre)

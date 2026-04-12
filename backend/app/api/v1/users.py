@@ -8,13 +8,13 @@ from app.schemas.user import UserCreate, UserResponse, UserUpdate
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.get("/", response_model=list[UserResponse])
+@router.get("", response_model=list[UserResponse])
 async def list_users(token: CurrentToken, session: DBSession, skip: int = 0, limit: int = 50):
     repo = UserRepository(session, token.tenant_id)
     return await repo.list(offset=skip, limit=limit)
 
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(data: UserCreate, token: CurrentToken, session: DBSession):
     repo = UserRepository(session, token.tenant_id)
     return await repo.create(

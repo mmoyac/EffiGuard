@@ -1,7 +1,7 @@
-import { Package, Layers, ArrowLeftRight, RotateCcw, AlertTriangle, User, FolderOpen } from "lucide-react";
+import { Package, Layers, ArrowLeftRight, RotateCcw, AlertTriangle, User, FolderOpen, SlidersHorizontal } from "lucide-react";
 import type { Asset, Loan } from "../../types";
 
-type ActionType = "loan" | "return" | "consumable" | "kit" | "unavailable";
+type ActionType = "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "adjust";
 
 interface Props {
   asset: Asset;
@@ -124,15 +124,39 @@ export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Pr
       </div>
 
       {/* Botón de acción principal */}
-      <ActionButton action={action} activeLoan={activeLoan} onAction={onAction} />
+      <ActionButton action={action as PrimaryAction} activeLoan={activeLoan} onAction={onAction} />
+
+      {/* Acciones secundarias */}
+      <div className="flex gap-2">
+        {asset.estado_id !== 4 && (
+          <button
+            onClick={() => onAction("loss")}
+            className="flex-1 flex items-center justify-center gap-2 bg-gray-800 hover:bg-red-900/40 border border-gray-700 hover:border-red-800 text-gray-400 hover:text-red-400 text-sm font-medium rounded-xl py-3 transition-colors"
+          >
+            <AlertTriangle size={15} />
+            Reportar pérdida
+          </button>
+        )}
+        {isConsumable && (
+          <button
+            onClick={() => onAction("adjust")}
+            className="flex-1 flex items-center justify-center gap-2 bg-gray-800 hover:bg-blue-900/30 border border-gray-700 hover:border-blue-800 text-gray-400 hover:text-blue-400 text-sm font-medium rounded-xl py-3 transition-colors"
+          >
+            <SlidersHorizontal size={15} />
+            Ajustar stock
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
+type PrimaryAction = "loan" | "return" | "consumable" | "kit" | "unavailable";
+
 function ActionButton({
   action, activeLoan: _activeLoan, onAction,
 }: {
-  action: ActionType;
+  action: PrimaryAction;
   activeLoan: Loan | null;
   onAction: (type: ActionType) => void;
 }) {
@@ -145,7 +169,7 @@ function ActionButton({
     );
   }
 
-  const configs: Record<Exclude<ActionType, "unavailable">, { label: string; icon: React.ReactNode; color: string }> = {
+  const configs: Record<Exclude<PrimaryAction, "unavailable">, { label: string; icon: React.ReactNode; color: string }> = {
     loan: {
       label: "Registrar Préstamo",
       icon: <ArrowLeftRight size={22} />,

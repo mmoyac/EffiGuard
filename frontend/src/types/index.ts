@@ -29,8 +29,9 @@ export interface Asset {
   id: number;
   tenant_id: number;
   uid_fisico: string;
+  nombre: string | null;
   parent_asset_id: number | null;
-  model_id: number;
+  model_id: number | null;
   tipo: "herramienta" | "consumible";
   estado_id: number;
   stock_actual: number;

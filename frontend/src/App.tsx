@@ -6,6 +6,7 @@ import { Layout } from "./components/layout/Layout";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Assets } from "./pages/Assets";
+import { AssetEdit } from "./pages/AssetEdit";
 import { Loans } from "./pages/Loans";
 import { Inventory } from "./pages/Inventory";
 import { Scanner } from "./pages/Scanner";
@@ -55,6 +56,7 @@ export default function App() {
         >
           <Route index element={<HomeRedirect />} />
           <Route path="assets" element={<Assets />} />
+          <Route path="assets/:id/edit" element={<AssetEdit />} />
           <Route path="assets/scan" element={<Scanner />} />
           <Route path="loans" element={<Loans />} />
           <Route path="loans/consumables" element={<Scanner />} />

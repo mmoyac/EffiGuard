@@ -12,8 +12,9 @@ class Asset(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
     uid_fisico: Mapped[str] = mapped_column(String(100), unique=True)  # Código QR o Tag RFID
+    nombre: Mapped[str | None] = mapped_column(String(200), nullable=True)
     parent_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
-    model_id: Mapped[int] = mapped_column(ForeignKey("models.id"))
+    model_id: Mapped[int | None] = mapped_column(ForeignKey("models.id"), nullable=True)
     tipo: Mapped[str] = mapped_column(String(20))  # herramienta | consumible
     estado_id: Mapped[int] = mapped_column(ForeignKey("asset_states.id"))
     stock_actual: Mapped[int] = mapped_column(Integer, default=0)
