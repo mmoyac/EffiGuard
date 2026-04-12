@@ -25,4 +25,6 @@ class User(Base):
     loans_delivered: Mapped[list["Loan"]] = relationship(
         back_populates="bodeguero", foreign_keys="Loan.bodeguero_id"
     )
-    inventory_logs: Mapped[list["InventoryLog"]] = relationship(back_populates="user")
+    inventory_logs: Mapped[list["InventoryLog"]] = relationship(
+        back_populates="user", foreign_keys="InventoryLog.user_id"
+    )

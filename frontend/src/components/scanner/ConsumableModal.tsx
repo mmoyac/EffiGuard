@@ -1,25 +1,32 @@
 import { useState } from "react";
+import { useQuery } from "react-query";
 import { X, Minus, Plus, ArrowRight } from "lucide-react";
-import type { Asset } from "../../types";
+import { usersApi } from "../../services/api";
+import type { Asset, User } from "../../types";
 
 interface Props {
   asset: Asset;
-  onConfirm: (cantidad: number, observaciones: string) => Promise<void>;
+  onConfirm: (cantidad: number, observaciones: string, operarioId: number) => Promise<void>;
   onClose: () => void;
 }
 
 export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
   const [cantidad, setCantidad] = useState(1);
+  const [operarioId, setOperarioId] = useState<number | "">("");
   const [observaciones, setObservaciones] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const { data: users = [] } = useQuery<User[]>("users", () =>
+    usersApi.list().then((r) => r.data)
+  );
 
   const stockOk = cantidad <= asset.stock_actual;
 
   async function handleConfirm() {
-    if (!stockOk || cantidad < 1) return;
+    if (!stockOk || cantidad < 1 || !operarioId) return;
     setLoading(true);
     try {
-      await onConfirm(cantidad, observaciones);
+      await onConfirm(cantidad, observaciones, Number(operarioId));
     } finally {
       setLoading(false);
     }
@@ -46,6 +53,23 @@ export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
             <span className={`text-2xl font-bold ${asset.stock_actual <= asset.stock_minimo ? "text-yellow-400" : "text-green-400"}`}>
               {asset.stock_actual}
             </span>
+          </div>
+
+          {/* Operario */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Operario que retira *</label>
+            <select
+              value={operarioId}
+              onChange={(e) => setOperarioId(e.target.value ? Number(e.target.value) : "")}
+              className="w-full bg-gray-700 text-white rounded-xl px-4 py-3 min-h-[48px] border border-gray-600 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">Seleccionar operario...</option>
+              {users
+                .filter((u) => u.role_id !== 1)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>{u.nombre}</option>
+                ))}
+            </select>
           </div>
 
           {/* Selector de cantidad táctil */}
@@ -103,7 +127,7 @@ export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
           </button>
           <button
             onClick={handleConfirm}
-            disabled={!stockOk || cantidad < 1 || loading}
+            disabled={!stockOk || cantidad < 1 || !operarioId || loading}
             className="flex-1 flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl px-4 py-3 min-h-[48px] transition-colors"
           >
             {loading ? "Procesando..." : (<><ArrowRight size={18} /> Retirar {cantidad}</>)}

@@ -6,7 +6,8 @@ from pydantic import BaseModel
 
 class AssetCreate(BaseModel):
     uid_fisico: str
-    model_id: int
+    nombre: str | None = None
+    model_id: int | None = None
     tipo: str  # herramienta | consumible
     estado_id: int
     stock_actual: int = 0
@@ -17,7 +18,9 @@ class AssetCreate(BaseModel):
 
 
 class AssetUpdate(BaseModel):
+    nombre: str | None = None
     estado_id: int | None = None
+    model_id: int | None = None
     stock_actual: int | None = None
     stock_minimo: int | None = None
     valor_reposicion: Decimal | None = None
@@ -28,8 +31,9 @@ class AssetResponse(BaseModel):
     id: int
     tenant_id: int
     uid_fisico: str
+    nombre: str | None
     parent_asset_id: int | None
-    model_id: int
+    model_id: int | None
     tipo: str
     estado_id: int
     stock_actual: int
@@ -48,4 +52,15 @@ AssetResponse.model_rebuild()
 class ConsumableWithdraw(BaseModel):
     asset_id: int
     cantidad: int
+    operario_id: int
+    observaciones: str | None = None
+
+
+class AssetLoss(BaseModel):
+    cantidad: int = 1          # Para consumibles; herramientas siempre 1
+    observaciones: str | None = None
+
+
+class AssetAdjust(BaseModel):
+    stock_nuevo: int           # Nuevo valor absoluto de stock
     observaciones: str | None = None

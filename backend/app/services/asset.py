@@ -5,13 +5,22 @@ from app.models.asset_state import AssetState
 from app.repositories.asset import AssetRepository
 from app.repositories.inventory_log import InventoryLogRepository
 from app.repositories.loan import LoanRepository
-from app.schemas.asset import AssetCreate, AssetUpdate, ConsumableWithdraw
+from app.schemas.asset import AssetAdjust, AssetCreate, AssetLoss, AssetUpdate, ConsumableWithdraw
+from app.schemas.inventory import InventoryLogResponse
 from app.schemas.loan import LoanCreate
 
 
 async def create_asset(data: AssetCreate, session: AsyncSession, tenant_id: int):
+    from sqlalchemy.exc import IntegrityError
     repo = AssetRepository(session, tenant_id)
-    return await repo.create(**data.model_dump())
+    try:
+        asset = await repo.create(**data.model_dump())
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ya existe un activo con el código '{data.uid_fisico}'",
+        )
+    return await repo.get_with_children(asset.id)
 
 
 async def update_asset(asset_id: int, data: AssetUpdate, session: AsyncSession, tenant_id: int):
@@ -19,7 +28,8 @@ async def update_asset(asset_id: int, data: AssetUpdate, session: AsyncSession, 
     asset = await repo.get(asset_id)
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
-    return await repo.update(asset, **data.model_dump(exclude_none=True))
+    await repo.update(asset, **data.model_dump(exclude_none=True))
+    return await repo.get_with_children(asset_id)
 
 
 async def scan_asset(uid_fisico: str, session: AsyncSession, tenant_id: int):
@@ -36,6 +46,9 @@ async def scan_asset(uid_fisico: str, session: AsyncSession, tenant_id: int):
 
 async def withdraw_consumable(data: ConsumableWithdraw, session: AsyncSession, tenant_id: int, user_id: int):
     """Retira cantidad de un consumible: descuenta stock y genera log."""
+    from sqlalchemy import select
+    from app.models.user import User
+
     asset_repo = AssetRepository(session, tenant_id)
     log_repo = InventoryLogRepository(session, tenant_id)
 
@@ -47,15 +60,73 @@ async def withdraw_consumable(data: ConsumableWithdraw, session: AsyncSession, t
     if asset.stock_actual < data.cantidad:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Stock insuficiente")
 
+    # Validar que el operario exista en el mismo tenant
+    operario = await session.get(User, data.operario_id)
+    if not operario or operario.tenant_id != tenant_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operario no encontrado")
+
     await asset_repo.update(asset, stock_actual=asset.stock_actual - data.cantidad)
     log = await log_repo.create(
         asset_id=data.asset_id,
         user_id=user_id,
+        operario_id=data.operario_id,
         tipo_movimiento="entrega",
         cantidad=data.cantidad,
         observaciones=data.observaciones,
     )
-    return log
+    return InventoryLogResponse(
+        **{c.key: getattr(log, c.key) for c in log.__table__.columns},
+        operario_nombre=operario.nombre,
+    )
+
+
+async def report_loss(asset_id: int, data: AssetLoss, session: AsyncSession, tenant_id: int, user_id: int):
+    """Registra pérdida/robo. Herramienta → estado Robado. Consumible → descuenta stock."""
+    asset_repo = AssetRepository(session, tenant_id)
+    log_repo = InventoryLogRepository(session, tenant_id)
+
+    asset = await asset_repo.get(asset_id)
+    if not asset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
+
+    if asset.tipo == "herramienta":
+        await asset_repo.update(asset, estado_id=4)  # 4 = Robado
+        cantidad = 1
+    else:
+        if asset.stock_actual < data.cantidad:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Stock insuficiente")
+        await asset_repo.update(asset, stock_actual=asset.stock_actual - data.cantidad)
+        cantidad = data.cantidad
+
+    return await log_repo.create(
+        asset_id=asset_id,
+        user_id=user_id,
+        tipo_movimiento="perdida",
+        cantidad=cantidad,
+        observaciones=data.observaciones,
+    )
+
+
+async def adjust_stock(asset_id: int, data: AssetAdjust, session: AsyncSession, tenant_id: int, user_id: int):
+    """Ajuste de inventario: establece stock absoluto y registra la diferencia en el log."""
+    asset_repo = AssetRepository(session, tenant_id)
+    log_repo = InventoryLogRepository(session, tenant_id)
+
+    asset = await asset_repo.get(asset_id)
+    if not asset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
+    if asset.tipo != "consumible":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Solo aplica a consumibles")
+
+    diferencia = data.stock_nuevo - asset.stock_actual
+    await asset_repo.update(asset, stock_actual=data.stock_nuevo)
+    return await log_repo.create(
+        asset_id=asset_id,
+        user_id=user_id,
+        tipo_movimiento="ajuste",
+        cantidad=abs(diferencia),
+        observaciones=data.observaciones or (f"Ajuste: {asset.stock_actual} → {data.stock_nuevo}"),
+    )
 
 
 async def create_loan(data: LoanCreate, session: AsyncSession, tenant_id: int, bodeguero_id: int):

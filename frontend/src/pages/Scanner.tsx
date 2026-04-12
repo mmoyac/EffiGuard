@@ -1,13 +1,16 @@
 import { useCallback, useRef, useState } from "react";
-import { ScanLine, X, CheckCircle, AlertCircle, Keyboard } from "lucide-react";
+import { ScanLine, X, CheckCircle, AlertCircle, Keyboard, Camera } from "lucide-react";
 import { useHIDScanner } from "../hooks/useHIDScanner";
 import { ScanResult } from "../components/scanner/ScanResult";
 import { LoanModal } from "../components/scanner/LoanModal";
 import { ConsumableModal } from "../components/scanner/ConsumableModal";
+import { CameraScanner } from "../components/scanner/CameraScanner";
+import { LossModal } from "../components/scanner/LossModal";
+import { AdjustModal } from "../components/scanner/AdjustModal";
 import { assetsApi, loansApi } from "../services/api";
 import type { Asset, Loan } from "../types";
 
-type ModalType = "loan" | "return" | "consumable" | "kit" | null;
+type ModalType = "loan" | "return" | "consumable" | "kit" | "loss" | "adjust" | null;
 
 type FeedbackState =
   | { type: "success"; message: string }
@@ -21,6 +24,7 @@ export function Scanner() {
   const [modal, setModal] = useState<ModalType>(null);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [loading, setLoading] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [manualUid, setManualUid] = useState("");
   const manualInputRef = useRef<HTMLInputElement>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,11 +102,12 @@ export function Scanner() {
     resetScan();
   }
 
-  async function handleConsumableConfirm(cantidad: number, observaciones: string) {
+  async function handleConsumableConfirm(cantidad: number, observaciones: string, operarioId: number) {
     if (!scannedAsset) return;
     await loansApi.withdrawConsumable({
       asset_id: scannedAsset.id,
       cantidad,
+      operario_id: operarioId,
       observaciones: observaciones || undefined,
     });
     setModal(null);
@@ -110,10 +115,28 @@ export function Scanner() {
     resetScan();
   }
 
-  function handleAction(type: "loan" | "return" | "consumable" | "kit" | "unavailable") {
+  async function handleLossConfirm(cantidad: number, observaciones: string) {
+    if (!scannedAsset) return;
+    await assetsApi.reportLoss(scannedAsset.id, { cantidad, observaciones: observaciones || undefined });
+    setModal(null);
+    const msg = scannedAsset.tipo === "herramienta"
+      ? "Herramienta marcada como perdida/robada"
+      : `${cantidad} unidades registradas como pérdida`;
+    showFeedback("success", msg);
+    resetScan();
+  }
+
+  async function handleAdjustConfirm(stockNuevo: number, observaciones: string) {
+    if (!scannedAsset) return;
+    await assetsApi.adjustStock(scannedAsset.id, { stock_nuevo: stockNuevo, observaciones: observaciones || undefined });
+    setModal(null);
+    showFeedback("success", `Stock ajustado a ${stockNuevo} unidades`);
+    resetScan();
+  }
+
+  function handleAction(type: "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "adjust") {
     if (type === "unavailable") return;
     if (type === "return") {
-      // Devolución directa sin modal adicional
       handleReturnConfirm();
       return;
     }
@@ -126,7 +149,29 @@ export function Scanner() {
       <div className="flex items-center gap-3">
         <ScanLine size={28} className="text-blue-400" />
         <h2 className="text-2xl font-bold">Escáner</h2>
+        <button
+          onClick={() => setCameraOpen((v) => !v)}
+          className={`ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+            cameraOpen
+              ? "bg-blue-600 text-white"
+              : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+          }`}
+        >
+          <Camera size={16} />
+          {cameraOpen ? "Cerrar cámara" : "Usar cámara"}
+        </button>
       </div>
+
+      {/* Cámara */}
+      {cameraOpen && (
+        <CameraScanner
+          active={cameraOpen}
+          onScan={(uid) => {
+            setCameraOpen(false);
+            handleScan(uid);
+          }}
+        />
+      )}
 
       {/* Feedback */}
       {feedback && (
@@ -204,6 +249,20 @@ export function Scanner() {
         <ConsumableModal
           asset={scannedAsset}
           onConfirm={handleConsumableConfirm}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal === "loss" && scannedAsset && (
+        <LossModal
+          asset={scannedAsset}
+          onConfirm={handleLossConfirm}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal === "adjust" && scannedAsset && (
+        <AdjustModal
+          asset={scannedAsset}
+          onConfirm={handleAdjustConfirm}
           onClose={() => setModal(null)}
         />
       )}
