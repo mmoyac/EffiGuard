@@ -25,12 +25,12 @@ async def me(token: CurrentToken, session: DBSession):
     from app.models.tenant import Tenant
 
     result = await session.execute(
-        select(User, Tenant.nombre_empresa.label("tenant_nombre"))
+        select(User, Tenant.nombre_empresa.label("tenant_nombre"), Tenant.logo_url.label("tenant_logo_url"))
         .join(Tenant, User.tenant_id == Tenant.id)
         .where(User.id == token.user_id)
     )
     row = result.first()
-    user, tenant_nombre = row
+    user, tenant_nombre, tenant_logo_url = row
     return MeResponse(
         id=user.id,
         nombre=user.nombre,
@@ -38,5 +38,6 @@ async def me(token: CurrentToken, session: DBSession):
         role_id=user.role_id,
         tenant_id=user.tenant_id,
         tenant_nombre=tenant_nombre,
+        tenant_logo_url=tenant_logo_url,
         uid_credencial=user.uid_credencial,
     )

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "react-query";
-import { Building2, Plus, ChevronDown, ChevronUp } from "lucide-react";
-import { adminApi } from "../../services/api";
+import { Building2, Plus, ChevronDown, ChevronUp, ImagePlus } from "lucide-react";
+import { adminApi, getMediaUrl } from "../../services/api";
 
 interface Tenant {
   id: number;
@@ -10,6 +10,7 @@ interface Tenant {
   slug: string;
   plan_type: string;
   is_active: boolean;
+  logo_url: string | null;
 }
 
 interface Summary {
@@ -31,6 +32,9 @@ export function AdminTenants() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [summary, setSummary] = useState<Record<number, Summary>>({});
   const [error, setError] = useState("");
+  const [logoUploading, setLogoUploading] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingLogoTenantId, setPendingLogoTenantId] = useState<number | null>(null);
 
   const { data: tenants = [], isLoading } = useQuery<Tenant[]>("admin-tenants", () =>
     adminApi.listTenants().then((r) => r.data)
@@ -60,10 +64,38 @@ export function AdminTenants() {
     }
   }
 
+  function handleLogoClick(tenantId: number) {
+    setPendingLogoTenantId(tenantId);
+    fileInputRef.current?.click();
+  }
+
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !pendingLogoTenantId) return;
+    setLogoUploading(pendingLogoTenantId);
+    try {
+      await adminApi.uploadTenantLogo(pendingLogoTenantId, file);
+      qc.invalidateQueries("admin-tenants");
+    } finally {
+      setLogoUploading(null);
+      setPendingLogoTenantId(null);
+      e.target.value = "";
+    }
+  }
+
   if (isLoading) return <p className="text-gray-400 p-4">Cargando tenants...</p>;
 
   return (
     <div className="space-y-4">
+      {/* Input de archivo oculto para upload de logo */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+        className="hidden"
+        onChange={handleLogoChange}
+      />
+
       <div className="flex items-center gap-3">
         <Building2 size={26} className="text-blue-400" />
         <h2 className="text-2xl font-bold">Tenants</h2>
@@ -109,7 +141,29 @@ export function AdminTenants() {
         {tenants.map((t) => (
           <div key={t.id} className={`bg-gray-800 rounded-xl border ${t.is_active ? "border-gray-700" : "border-gray-700/40 opacity-60"}`}>
             <div className="px-4 py-3 flex items-center gap-3 min-w-0">
-              <Building2 size={18} className="text-blue-400 flex-shrink-0" />
+              {/* Logo o ícono */}
+              <div className="flex-shrink-0 relative group w-9 h-9">
+                {t.logo_url ? (
+                  <img
+                    src={getMediaUrl(t.logo_url) ?? ""}
+                    alt={t.nombre_empresa}
+                    className="w-9 h-9 rounded-lg object-contain bg-gray-700 border border-gray-600"
+                  />
+                ) : (
+                  <Building2 size={18} className="text-blue-400 mt-1.5 ml-1.5" />
+                )}
+                <button
+                  onClick={() => handleLogoClick(t.id)}
+                  disabled={logoUploading === t.id}
+                  title="Subir logo"
+                  className="absolute inset-0 flex items-center justify-center rounded-lg bg-gray-900/70 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                >
+                  {logoUploading === t.id
+                    ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <ImagePlus size={14} className="text-white" />}
+                </button>
+              </div>
+
               <div className="flex-1 min-w-0">
                 {editId === t.id ? (
                   <input autoFocus value={editForm.nombre_empresa ?? t.nombre_empresa}

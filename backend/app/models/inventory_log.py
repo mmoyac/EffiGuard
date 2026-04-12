@@ -14,6 +14,7 @@ class InventoryLog(Base):
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     operario_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     tipo_movimiento: Mapped[str] = mapped_column(String(30))  # entrega, devolucion, ajuste, compra, perdida
     cantidad: Mapped[int] = mapped_column(Integer, default=1)
     fecha_hora: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

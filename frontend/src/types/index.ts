@@ -8,10 +8,13 @@ export interface User {
   id: number;
   nombre: string;
   email: string;
+  rut: string;
   role_id: number;
   tenant_id: number;
-  tenant_nombre: string;
+  tenant_nombre?: string;
+  tenant_logo_url?: string | null;
   uid_credencial: string | null;
+  is_active?: boolean;
 }
 
 export interface MenuItem {
@@ -64,7 +67,13 @@ export interface InventoryLog {
   id: number;
   tenant_id: number;
   asset_id: number;
+  asset_nombre: string | null;
+  asset_uid: string | null;
+  asset_tipo: string | null;
   user_id: number;
+  user_nombre: string | null;
+  operario_id: number | null;
+  operario_nombre: string | null;
   tipo_movimiento: string;
   cantidad: number;
   fecha_hora: string;

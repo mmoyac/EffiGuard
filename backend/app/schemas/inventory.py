@@ -7,6 +7,9 @@ class InventoryLogResponse(BaseModel):
     id: int
     tenant_id: int
     asset_id: int
+    asset_nombre: str | None = None
+    asset_uid: str | None = None
+    asset_tipo: str | None = None
     user_id: int
     user_nombre: str | None = None
     operario_id: int | None = None

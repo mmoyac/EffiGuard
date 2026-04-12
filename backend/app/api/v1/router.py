@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import assets, auth, catalog, dashboard, inventory, loans, menu, projects, superadmin, users
+from app.api.v1 import assets, auth, catalog, dashboard, inventory, loans, menu, projects, pwa, superadmin, users
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -14,3 +14,4 @@ api_router.include_router(menu.router)
 api_router.include_router(projects.router)
 api_router.include_router(catalog.router)
 api_router.include_router(superadmin.router)
+api_router.include_router(pwa.router)

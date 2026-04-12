@@ -2,6 +2,8 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import * as Icons from "lucide-react";
 import { useMenu } from "../../hooks/useMenu";
+import { useAuthStore } from "../../stores/authStore";
+import { getMediaUrl } from "../../services/api";
 import type { MenuItem } from "../../types";
 
 interface SidebarProps {
@@ -95,6 +97,8 @@ function NavItem({
 
 export function Sidebar({ isOpen, collapsed, onClose, onToggleCollapse }: SidebarProps) {
   const { data: menu = [], isLoading } = useMenu();
+  const user = useAuthStore((s) => s.user);
+  const logoUrl = getMediaUrl(user?.tenant_logo_url);
 
   return (
     <aside
@@ -109,7 +113,14 @@ export function Sidebar({ isOpen, collapsed, onClose, onToggleCollapse }: Sideba
     >
       {/* Header: logo + botón colapsar */}
       <div className="p-4 border-b border-gray-800 flex-shrink-0 flex items-center justify-between min-h-[60px]">
-        {!collapsed && <h1 className="text-xl font-bold text-blue-400">EffiGuard</h1>}
+        {!collapsed && (
+          logoUrl
+            ? <img src={logoUrl} alt={user?.tenant_nombre ?? "Logo"} className="h-8 max-w-[140px] object-contain" />
+            : <h1 className="text-xl font-bold text-blue-400">EffiGuard</h1>
+        )}
+        {collapsed && logoUrl && (
+          <img src={logoUrl} alt="" className="w-8 h-8 object-contain mx-auto" />
+        )}
         <button
           onClick={onToggleCollapse}
           title={collapsed ? "Expandir menú" : "Colapsar menú"}

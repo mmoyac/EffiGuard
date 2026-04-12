@@ -15,6 +15,7 @@ class Tenant(Base):
     slug: Mapped[str] = mapped_column(String(100), unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     plan_type: Mapped[str] = mapped_column(String(20), default="basic")  # basic, pro, enterprise
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     users: Mapped[list["User"]] = relationship(back_populates="tenant")

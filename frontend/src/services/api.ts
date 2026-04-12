@@ -2,6 +2,15 @@ import axios from "axios";
 import { useTenantStore } from "../stores/tenantStore";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
+// URL base sin el prefijo /api/v1 (para archivos estáticos)
+const MEDIA_BASE = BASE_URL.replace(/\/api\/v1\/?$/, "");
+
+/** Convierte una ruta relativa de servidor (e.g. /static/logos/x.png) en URL absoluta. */
+export function getMediaUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (path.startsWith("http")) return path;
+  return `${MEDIA_BASE}${path}`;
+}
 
 export const api = axios.create({ baseURL: BASE_URL });
 
@@ -72,6 +81,7 @@ export const loansApi = {
 
 export const usersApi = {
   list: () => api.get("/users?limit=200"),
+  scanByCredential: (uid: string) => api.get(`/users/scan/${encodeURIComponent(uid)}`),
 };
 
 export const projectsApi = {
@@ -115,4 +125,12 @@ export const adminApi = {
   listPermissions: (roleId?: number) => api.get(`/admin/permissions${roleId ? `?role_id=${roleId}` : ""}`),
   setPermissions: (roleId: number, menuItemIds: number[]) =>
     api.put("/admin/permissions", { role_id: roleId, menu_item_ids: menuItemIds }),
+  // Logo de tenant
+  uploadTenantLogo: (tenantId: number, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post(`/admin/tenants/${tenantId}/logo`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };

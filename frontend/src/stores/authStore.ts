@@ -19,11 +19,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isAuthenticated: true });
   },
 
-  setUser: (user) => set({ user }),
+  setUser: (user) => {
+    if (user.tenant_logo_url) {
+      localStorage.setItem("tenant_logo_url", user.tenant_logo_url);
+    }
+    set({ user });
+  },
 
   logout: () => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
+    localStorage.removeItem("tenant_logo_url");
     set({ user: null, isAuthenticated: false });
     // Limpiar todo el cache de React Query para que el próximo usuario no vea datos del anterior
     import("../main").then(({ queryClient }) => queryClient.clear());

@@ -23,6 +23,7 @@ class MeResponse(BaseModel):
     role_id: int
     tenant_id: int
     tenant_nombre: str
+    tenant_logo_url: str | None = None
     uid_credencial: str | None
 
     model_config = {"from_attributes": True}

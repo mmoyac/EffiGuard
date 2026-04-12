@@ -53,6 +53,7 @@ class ConsumableWithdraw(BaseModel):
     asset_id: int
     cantidad: int
     operario_id: int
+    project_id: int | None = None
     observaciones: str | None = None
 
 

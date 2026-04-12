@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { authApi } from "../services/api";
+import { authApi, getMediaUrl } from "../services/api";
 import { useAuthStore } from "../stores/authStore";
 
 export function Login() {
@@ -9,6 +9,8 @@ export function Login() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const { setTokens, setUser } = useAuthStore();
+  // Logo del tenant de la sesión anterior (guardado en localStorage al hacer login)
+  const savedLogoUrl = getMediaUrl(localStorage.getItem("tenant_logo_url"));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,7 +29,9 @@ export function Login() {
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-gray-800 rounded-2xl p-8 shadow-2xl">
-        <h1 className="text-3xl font-bold text-blue-400 mb-2">EffiGuard</h1>
+        {savedLogoUrl
+          ? <img src={savedLogoUrl} alt="Logo" className="h-14 max-w-[200px] object-contain mb-2" />
+          : <h1 className="text-3xl font-bold text-blue-400 mb-2">EffiGuard</h1>}
         <p className="text-gray-400 mb-8 text-sm">Control de activos y bodega</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

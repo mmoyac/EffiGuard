@@ -2,7 +2,7 @@ import * as Icons from "lucide-react";
 import { useQuery } from "react-query";
 import { useAuthStore } from "../../stores/authStore";
 import { useTenantStore } from "../../stores/tenantStore";
-import { adminApi } from "../../services/api";
+import { adminApi, getMediaUrl } from "../../services/api";
 
 interface Tenant { id: number; nombre_empresa: string; slug: string; }
 
@@ -21,6 +21,7 @@ export function Topbar({ onMobileMenuOpen }: TopbarProps) {
   const { user, logout } = useAuthStore((s) => ({ user: s.user, logout: s.logout }));
   const { actingTenantId, actingTenantName, setActingTenant, clearActingTenant } = useTenantStore();
   const isSuperAdmin = user?.role_id === 1;
+  const logoUrl = getMediaUrl(user?.tenant_logo_url);
 
   const { data: tenants = [] } = useQuery<Tenant[]>(
     "admin-tenants",
@@ -42,7 +43,9 @@ export function Topbar({ onMobileMenuOpen }: TopbarProps) {
       >
         <Icons.Menu size={22} />
       </button>
-      <span className="md:hidden text-base font-bold text-blue-400">EffiGuard</span>
+      {logoUrl
+        ? <img src={logoUrl} alt="" className="md:hidden h-7 max-w-[120px] object-contain" />
+        : <span className="md:hidden text-base font-bold text-blue-400">EffiGuard</span>}
 
       <div className="flex-1" />
 

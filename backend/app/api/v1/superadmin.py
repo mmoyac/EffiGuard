@@ -3,7 +3,9 @@ Router exclusivo para Super Admin.
 Prefijo: /api/v1/admin
 Todos los endpoints requieren role_id == 1.
 """
-from fastapi import APIRouter, HTTPException, status
+import os
+import uuid
+from fastapi import APIRouter, HTTPException, UploadFile, File, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, delete
 import sqlalchemy as sa
@@ -38,6 +40,7 @@ class TenantResponse(BaseModel):
     slug: str
     is_active: bool
     plan_type: str
+    logo_url: str | None = None
     model_config = {"from_attributes": True}
 
 class TenantUpdate(BaseModel):
@@ -176,6 +179,47 @@ async def update_tenant(tenant_id: int, data: TenantUpdate, token: SuperAdminTok
         raise HTTPException(status_code=404, detail="Tenant no encontrado")
     for k, v in data.model_dump(exclude_none=True).items():
         setattr(tenant, k, v)
+    await session.commit()
+    await session.refresh(tenant)
+    return tenant
+
+
+_LOGOS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "logos")
+_ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp", "image/svg+xml"}
+
+
+@router.post("/tenants/{tenant_id}/logo", response_model=TenantResponse)
+async def upload_tenant_logo(
+    tenant_id: int,
+    token: SuperAdminToken,
+    session: DBSession,
+    file: UploadFile = File(...),
+):
+    result = await session.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant no encontrado")
+
+    if file.content_type not in _ALLOWED_TYPES:
+        raise HTTPException(status_code=400, detail="Tipo de archivo no permitido. Use PNG, JPEG, WebP o SVG.")
+
+    ext = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "png"
+    filename = f"{tenant_id}_{uuid.uuid4().hex[:8]}.{ext}"
+
+    os.makedirs(_LOGOS_DIR, exist_ok=True)
+    dest = os.path.join(_LOGOS_DIR, filename)
+    content = await file.read()
+    with open(dest, "wb") as f:
+        f.write(content)
+
+    # Eliminar logo anterior si existía
+    if tenant.logo_url:
+        old_filename = tenant.logo_url.split("/")[-1]
+        old_path = os.path.join(_LOGOS_DIR, old_filename)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+
+    tenant.logo_url = f"/static/logos/{filename}"
     await session.commit()
     await session.refresh(tenant)
     return tenant

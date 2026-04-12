@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "react-query";
-import { UsersRound, UserPlus, UserCheck, UserX } from "lucide-react";
+import { UsersRound, UserPlus, UserCheck, UserX, Pencil, Check, X } from "lucide-react";
 import { adminApi } from "../../services/api";
 import { useTenantStore } from "../../stores/tenantStore";
 
@@ -48,6 +48,17 @@ export function AdminUsers() {
   const toggleActive = useMutation(
     ({ id, is_active }: { id: number; is_active: boolean }) => adminApi.updateUser(id, { is_active }),
     { onSuccess: () => qc.invalidateQueries("admin-users") }
+  );
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editUid, setEditUid] = useState("");
+
+  const updateUid = useMutation(
+    ({ id, uid }: { id: number; uid: string }) =>
+      adminApi.updateUser(id, { uid_credencial: uid || null }),
+    {
+      onSuccess: () => { qc.invalidateQueries("admin-users"); setEditingId(null); },
+    }
   );
 
   const tenantName = (id: number) => tenants.find((t) => t.id === id)?.nombre_empresa ?? `Tenant #${id}`;
@@ -117,19 +128,60 @@ export function AdminUsers() {
 
       <div className="space-y-2">
         {users.map((u) => (
-          <div key={u.id} className={`bg-gray-800 rounded-xl border px-4 py-3 flex items-center gap-3 min-w-0 ${u.is_active ? "border-gray-700" : "border-gray-700/40 opacity-60"}`}>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white truncate">{u.nombre}</p>
-              <p className="text-xs text-gray-500 truncate">{u.email} · {u.rut}</p>
-              <p className="text-xs text-blue-400 truncate">{tenantName(u.tenant_id)}</p>
+          <div key={u.id} className={`bg-gray-800 rounded-xl border px-4 py-3 space-y-2 ${u.is_active ? "border-gray-700" : "border-gray-700/40 opacity-60"}`}>
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{u.nombre}</p>
+                <p className="text-xs text-gray-500 truncate">{u.email} · {u.rut}</p>
+                <p className="text-xs text-blue-400 truncate">{tenantName(u.tenant_id)}</p>
+              </div>
+              <span className="flex-shrink-0 text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded-full">
+                {roles.find((r) => r.id === u.role_id)?.nombre ?? `rol ${u.role_id}`}
+              </span>
+              <button
+                onClick={() => { setEditingId(editingId === u.id ? null : u.id); setEditUid(u.uid_credencial ?? ""); }}
+                className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:bg-gray-700 transition-colors"
+                title="Editar credencial"
+              >
+                <Pencil size={15} />
+              </button>
+              <button onClick={() => toggleActive.mutate({ id: u.id, is_active: !u.is_active })}
+                className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:bg-gray-700 transition-colors">
+                {u.is_active ? <UserCheck size={16} className="text-green-400" /> : <UserX size={16} className="text-red-400" />}
+              </button>
             </div>
-            <span className="flex-shrink-0 text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded-full">
-              {roles.find((r) => r.id === u.role_id)?.nombre ?? `rol ${u.role_id}`}
-            </span>
-            <button onClick={() => toggleActive.mutate({ id: u.id, is_active: !u.is_active })}
-              className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:bg-gray-700 transition-colors">
-              {u.is_active ? <UserCheck size={16} className="text-green-400" /> : <UserX size={16} className="text-red-400" />}
-            </button>
+
+            {editingId === u.id && (
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  autoFocus
+                  type="text"
+                  value={editUid}
+                  onChange={(e) => setEditUid(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") updateUid.mutate({ id: u.id, uid: editUid });
+                    if (e.key === "Escape") setEditingId(null);
+                  }}
+                  placeholder="UID credencial RFID/QR (vacío para quitar)"
+                  className="flex-1 bg-gray-700 border border-gray-600 focus:border-blue-500 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none font-mono"
+                />
+                <button
+                  onClick={() => updateUid.mutate({ id: u.id, uid: editUid })}
+                  disabled={updateUid.isLoading}
+                  className="p-2 bg-green-700 hover:bg-green-600 disabled:opacity-50 rounded-lg transition-colors"
+                  title="Guardar"
+                >
+                  <Check size={15} className="text-white" />
+                </button>
+                <button
+                  onClick={() => setEditingId(null)}
+                  className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                  title="Cancelar"
+                >
+                  <X size={15} className="text-gray-300" />
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>

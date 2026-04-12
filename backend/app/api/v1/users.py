@@ -27,6 +27,16 @@ async def create_user(data: UserCreate, token: CurrentToken, session: DBSession)
     )
 
 
+@router.get("/scan/{uid_credencial}", response_model=UserResponse)
+async def scan_user(uid_credencial: str, token: CurrentToken, session: DBSession):
+    """Resuelve un operario por su credencial RFID/QR. Usado para confirmar recepción de préstamo."""
+    repo = UserRepository(session, token.tenant_id)
+    user = await repo.get_by_credential_uid(uid_credencial)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Credencial no encontrada")
+    return user
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(user_id: int, token: CurrentToken, session: DBSession):
     repo = UserRepository(session, token.tenant_id)

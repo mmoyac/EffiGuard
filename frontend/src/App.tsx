@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { useAuthStore } from "./stores/authStore";
 import { authApi } from "./services/api";
+import { usePWAManifest } from "./hooks/usePWAManifest";
 import { Layout } from "./components/layout/Layout";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
@@ -34,6 +35,7 @@ function HomeRedirect() {
 
 export default function App() {
   const { isAuthenticated, setUser, logout } = useAuthStore();
+  usePWAManifest();
 
   useEffect(() => {
     if (!isAuthenticated) return;

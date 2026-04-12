@@ -13,6 +13,9 @@ node_modules/
 dist/
 .cache/
 
+# Archivos subidos por usuarios (logos de tenants, etc.)
+backend/static/logos/
+
 # Docker
 *.log
 

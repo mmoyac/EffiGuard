@@ -1,23 +1,29 @@
 import { useState } from "react";
 import { useQuery } from "react-query";
 import { X, Minus, Plus, ArrowRight } from "lucide-react";
-import { usersApi } from "../../services/api";
+import { usersApi, projectsApi } from "../../services/api";
 import type { Asset, User } from "../../types";
+
+interface Project { id: number; nombre: string; is_active: boolean }
 
 interface Props {
   asset: Asset;
-  onConfirm: (cantidad: number, observaciones: string, operarioId: number) => Promise<void>;
+  onConfirm: (cantidad: number, observaciones: string, operarioId: number, projectId: number | null) => Promise<void>;
   onClose: () => void;
 }
 
 export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
   const [cantidad, setCantidad] = useState(1);
   const [operarioId, setOperarioId] = useState<number | "">("");
+  const [projectId, setProjectId] = useState<number | "">("");
   const [observaciones, setObservaciones] = useState("");
   const [loading, setLoading] = useState(false);
 
   const { data: users = [] } = useQuery<User[]>("users", () =>
     usersApi.list().then((r) => r.data)
+  );
+  const { data: projects = [] } = useQuery<Project[]>("projects", () =>
+    projectsApi.list().then((r) => r.data)
   );
 
   const stockOk = cantidad <= asset.stock_actual;
@@ -26,7 +32,7 @@ export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
     if (!stockOk || cantidad < 1 || !operarioId) return;
     setLoading(true);
     try {
-      await onConfirm(cantidad, observaciones, Number(operarioId));
+      await onConfirm(cantidad, observaciones, Number(operarioId), projectId ? Number(projectId) : null);
     } finally {
       setLoading(false);
     }
@@ -102,6 +108,21 @@ export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
             {!stockOk && (
               <p className="text-red-400 text-sm mt-2">Stock insuficiente (máx. {asset.stock_actual})</p>
             )}
+          </div>
+
+          {/* Proyecto */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Proyecto (opcional)</label>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : "")}
+              className="w-full bg-gray-700 text-white rounded-xl px-4 py-3 min-h-[48px] border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+            >
+              <option value="">Sin proyecto</option>
+              {projects.filter((p) => p.is_active).map((p) => (
+                <option key={p.id} value={p.id}>{p.nombre}</option>
+              ))}
+            </select>
           </div>
 
           {/* Observaciones */}

@@ -70,6 +70,7 @@ async def withdraw_consumable(data: ConsumableWithdraw, session: AsyncSession, t
         asset_id=data.asset_id,
         user_id=user_id,
         operario_id=data.operario_id,
+        project_id=data.project_id,
         tipo_movimiento="entrega",
         cantidad=data.cantidad,
         observaciones=data.observaciones,

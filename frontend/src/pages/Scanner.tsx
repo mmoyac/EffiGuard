@@ -102,12 +102,13 @@ export function Scanner() {
     resetScan();
   }
 
-  async function handleConsumableConfirm(cantidad: number, observaciones: string, operarioId: number) {
+  async function handleConsumableConfirm(cantidad: number, observaciones: string, operarioId: number, projectId: number | null) {
     if (!scannedAsset) return;
     await loansApi.withdrawConsumable({
       asset_id: scannedAsset.id,
       cantidad,
       operario_id: operarioId,
+      project_id: projectId ?? undefined,
       observaciones: observaciones || undefined,
     });
     setModal(null);
