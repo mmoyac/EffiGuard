@@ -16,6 +16,7 @@ class UserUpdate(BaseModel):
     role_id: int | None = None
     uid_credencial: str | None = None
     is_active: bool | None = None
+    password: str | None = None
 
 
 class UserResponse(BaseModel):

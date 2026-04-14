@@ -21,8 +21,8 @@ export function Login() {
       const { data: user } = await authApi.me();
       setUser(user);
       navigate("/");
-    } catch {
-      setError("Email o contraseña incorrectos");
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? "Email o contraseña incorrectos");
     }
   }
 

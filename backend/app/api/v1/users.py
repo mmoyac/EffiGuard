@@ -52,4 +52,7 @@ async def update_user(user_id: int, data: UserUpdate, token: CurrentToken, sessi
     user = await repo.get(user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
-    return await repo.update(user, **data.model_dump(exclude_none=True))
+    update_data = data.model_dump(exclude_none=True)
+    if "password" in update_data:
+        update_data["password_hash"] = hash_password(update_data.pop("password"))
+    return await repo.update(user, **update_data)

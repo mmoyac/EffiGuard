@@ -18,6 +18,7 @@ class AssetCreate(BaseModel):
 
 
 class AssetUpdate(BaseModel):
+    uid_fisico: str | None = None
     nombre: str | None = None
     estado_id: int | None = None
     model_id: int | None = None

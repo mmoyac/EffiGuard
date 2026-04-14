@@ -1,9 +1,17 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "react-query";
-import { ArrowLeft, Package, Layers, Settings2, Package2 } from "lucide-react";
+import { ArrowLeft, Package, Layers, Settings2, Package2, Camera, RefreshCw } from "lucide-react";
 import { assetsApi, catalogApi } from "../services/api";
+import { CameraScanner } from "../components/scanner/CameraScanner";
 import type { Asset } from "../types";
+
+function generateUid(prefix: string): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const array = new Uint8Array(8);
+  crypto.getRandomValues(array);
+  return `${prefix}-${Array.from(array).map((b) => chars[b % chars.length]).join("")}`;
+}
 
 interface State { id: number; nombre: string; }
 interface AssetModel { id: number; brand_id: number; nombre: string; }
@@ -78,6 +86,7 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
   const brand = model ? brands.find((b) => b.id === model.brand_id) : null;
 
   const [form, setForm] = useState({
+    uid_fisico: asset.uid_fisico,
     nombre: asset.nombre ?? "",
     model_id: asset.model_id ? String(asset.model_id) : "",
     estado_id: asset.estado_id,
@@ -85,6 +94,7 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
     valor_reposicion: asset.valor_reposicion ? String(asset.valor_reposicion) : "",
     proxima_mantencion: asset.proxima_mantencion ?? "",
   });
+  const [scanningUid, setScanningUid] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -103,6 +113,7 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
     setError("");
     try {
       await assetsApi.update(asset.id, {
+        uid_fisico: form.uid_fisico.trim() || undefined,
         nombre: form.nombre.trim() || null,
         model_id: form.model_id ? Number(form.model_id) : null,
         estado_id: Number(form.estado_id),
@@ -177,6 +188,38 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
         {error && (
           <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 px-3 py-2 rounded-lg">{error}</p>
         )}
+
+        {/* Código identificador */}
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-300">Código identificador <span className="text-red-400">*</span></label>
+          <p className="text-xs text-gray-500">
+            {isConsumable ? "Código de barras del producto" : "QR o tag RFID — puedes generar uno nuevo o escanear el físico"}
+          </p>
+          <div className="flex gap-2">
+            <input
+              required
+              value={form.uid_fisico}
+              onChange={(e) => setForm({ ...form, uid_fisico: e.target.value })}
+              onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+              className="flex-1 bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono"
+            />
+            {!isConsumable && (
+              <button type="button" title="Generar nuevo código"
+                onClick={() => setForm((f) => ({ ...f, uid_fisico: generateUid("TOOL") }))}
+                className="px-3 rounded-xl border border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors flex items-center min-h-[44px]">
+                <RefreshCw size={15} />
+              </button>
+            )}
+            <button type="button" title="Escanear con cámara"
+              onClick={() => setScanningUid((v) => !v)}
+              className={`px-3 rounded-xl border transition-colors flex items-center min-h-[44px] ${scanningUid ? "bg-blue-600 border-blue-500 text-white" : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600"}`}>
+              <Camera size={15} />
+            </button>
+          </div>
+          {scanningUid && (
+            <CameraScanner active={scanningUid} onScan={(uid) => { setForm((f) => ({ ...f, uid_fisico: uid })); setScanningUid(false); }} />
+          )}
+        </div>
 
         {/* Nombre */}
         <div className="space-y-1">

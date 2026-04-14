@@ -16,11 +16,11 @@ export function Projects() {
   const [error, setError] = useState("");
 
   const { data: projects = [], isLoading } = useQuery<Project[]>("projects", () =>
-    api.get("/projects/").then((r) => r.data)
+    api.get("/projects").then((r) => r.data)
   );
 
   const createMutation = useMutation(
-    (nombre: string) => api.post("/projects/", { nombre }),
+    (nombre: string) => api.post("/projects", { nombre }),
     {
       onSuccess: () => {
         qc.invalidateQueries("projects");

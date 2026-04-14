@@ -61,7 +61,6 @@ export default function App() {
           <Route path="assets/:id/edit" element={<AssetEdit />} />
           <Route path="assets/scan" element={<Scanner />} />
           <Route path="loans" element={<Loans />} />
-          <Route path="loans/consumables" element={<Scanner />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="my-loans" element={<MyLoans />} />
           <Route path="users" element={<Users />} />

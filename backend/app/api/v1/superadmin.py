@@ -400,6 +400,8 @@ async def delete_menu_item(item_id: int, token: SuperAdminToken, session: DBSess
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Ítem de menú no encontrado")
+    # Eliminar permisos asociados antes de borrar el ítem (FK constraint)
+    await session.execute(delete(RoleMenuPermission).where(RoleMenuPermission.menu_item_id == item_id))
     await session.delete(item)
     await session.commit()
 

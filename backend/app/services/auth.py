@@ -47,21 +47,28 @@ async def login(request: LoginRequest, session: AsyncSession, host: str = "") ->
             select(User).where(
                 User.email == request.email,
                 User.tenant_id == tenant.id,
-                User.is_active == True,
             )
         )
     else:
         # Dev/local: búsqueda global por email (sin filtro tenant)
         result = await session.execute(
-            select(User).where(User.email == request.email, User.is_active == True)
+            select(User).where(User.email == request.email)
         )
 
     user = result.scalar_one_or_none()
 
+    # Usuario no existe o contraseña incorrecta — mismo mensaje para no revelar info
     if not user or not verify_password(request.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
+        )
+
+    # Usuario existe y contraseña correcta, pero está desactivado
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu cuenta está desactivada. Contacta al administrador.",
         )
 
     return TokenResponse(
