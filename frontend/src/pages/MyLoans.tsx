@@ -58,7 +58,10 @@ function LoanCard({ loan }: { loan: Loan }) {
           <Package size={20} className="text-blue-400" />
         </div>
         <div className="min-w-0">
-          <p className="font-mono text-sm text-white font-semibold truncate">
+          {loan.asset_nombre && (
+            <p className="text-sm text-white font-semibold truncate">{loan.asset_nombre}</p>
+          )}
+          <p className="font-mono text-xs text-gray-400 truncate">
             {loan.asset_uid_fisico ?? `#${loan.asset_id}`}
           </p>
           <p className="text-xs text-gray-500">En tu poder</p>

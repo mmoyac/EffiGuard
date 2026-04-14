@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "react-query";
-import { FolderOpen, FolderPlus, FolderX } from "lucide-react";
+import { FolderOpen, FolderPlus, FolderX, FolderCheck } from "lucide-react";
 import { api } from "../services/api";
 
 interface Project {
@@ -34,6 +34,11 @@ export function Projects() {
 
   const deactivateMutation = useMutation(
     (id: number) => api.patch(`/projects/${id}/deactivate`),
+    { onSuccess: () => qc.invalidateQueries("projects") }
+  );
+
+  const activateMutation = useMutation(
+    (id: number) => api.patch(`/projects/${id}/activate`),
     { onSuccess: () => qc.invalidateQueries("projects") }
   );
 
@@ -124,12 +129,19 @@ export function Projects() {
         <div className="space-y-2">
           <p className="text-xs text-gray-500 font-medium px-1">Inactivos</p>
           {inactive.map((p) => (
-            <div key={p.id} className="bg-gray-800/50 rounded-xl border border-gray-700/40 px-4 py-3 flex items-center gap-3 min-w-0 opacity-60">
+            <div key={p.id} className="bg-gray-800/50 rounded-xl border border-gray-700/40 px-4 py-3 flex items-center gap-3 min-w-0">
               <FolderOpen size={18} className="text-gray-600 flex-shrink-0" />
               <span className="flex-1 text-sm text-gray-500 truncate">{p.nombre}</span>
               <span className="flex-shrink-0 text-xs text-gray-500 bg-gray-800 border border-gray-700 px-2.5 py-1 rounded-full">
                 Inactivo
               </span>
+              <button
+                onClick={() => activateMutation.mutate(p.id)}
+                title="Reactivar proyecto"
+                className="flex-shrink-0 p-2 rounded-lg text-gray-500 hover:bg-gray-700 hover:text-green-400 transition-colors"
+              >
+                <FolderCheck size={16} />
+              </button>
             </div>
           ))}
         </div>

@@ -186,27 +186,30 @@ function LogCard({ log }: { log: InventoryLog }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             {log.asset_tipo === "consumible" ? (
-              <Package size={13} className="flex-shrink-0 text-gray-500" />
+              <Package size={13} className="flex-shrink-0 text-orange-400" />
             ) : (
-              <Wrench size={13} className="flex-shrink-0 text-gray-500" />
+              <Wrench size={13} className="flex-shrink-0 text-blue-400" />
             )}
             <p className="text-sm text-white font-medium truncate">{assetLabel}</p>
-            {log.asset_uid && (
-              <span className="flex-shrink-0 text-[10px] font-mono text-gray-500 bg-gray-700 px-1.5 py-0.5 rounded hidden sm:block">
-                {log.asset_uid}
-              </span>
-            )}
+            <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border hidden sm:block ${
+              log.asset_tipo === "consumible"
+                ? "text-orange-400 bg-orange-900/30 border-orange-800"
+                : "text-blue-400 bg-blue-900/30 border-blue-800"
+            }`}>
+              {log.asset_tipo === "consumible" ? "Consumible" : "Herramienta"}
+            </span>
           </div>
           <p className="text-xs text-gray-500 truncate">
             {fecha.toLocaleString("es-CL", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
+              day: "2-digit", month: "2-digit", year: "numeric",
+              hour: "2-digit", minute: "2-digit",
             })}
-            {log.user_nombre && <> · <span className="text-gray-400">{log.user_nombre}</span></>}
           </p>
+          {log.operario_nombre && (
+            <p className="text-xs text-gray-400 truncate">
+              Operario: <span className="text-white font-medium">{log.operario_nombre}</span>
+            </p>
+          )}
         </div>
 
         {/* Cantidad */}

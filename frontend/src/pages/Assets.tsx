@@ -208,13 +208,11 @@ export function Assets() {
                       onChange={(e) => setAssetForm({ ...assetForm, uid_fisico: e.target.value })}
                       onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                       className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 flex-1 font-mono" />
-                    {assetForm.tipo === "herramienta" && (
-                      <button type="button" title="Generar código automático"
-                        onClick={() => setAssetForm((f) => ({ ...f, uid_fisico: generateUid("TOOL") }))}
-                        className="px-3 rounded-xl border border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors flex items-center min-h-[44px]">
-                        <RefreshCw size={15} />
-                      </button>
-                    )}
+                    <button type="button" title="Generar código automático"
+                      onClick={() => setAssetForm((f) => ({ ...f, uid_fisico: generateUid(f.tipo === "consumible" ? "CONS" : "TOOL") }))}
+                      className="px-3 rounded-xl border border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors flex items-center min-h-[44px]">
+                      <RefreshCw size={15} />
+                    </button>
                     <button type="button" onClick={() => { setScanningUid((v) => !v); setNfcScanningUid(false); }} title="Escanear con cámara"
                       className={`px-3 rounded-xl border transition-colors flex items-center min-h-[44px] ${scanningUid ? "bg-blue-600 border-blue-500 text-white" : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600"}`}>
                       <Camera size={16} />

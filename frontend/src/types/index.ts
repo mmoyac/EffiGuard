@@ -61,6 +61,7 @@ export interface Loan {
   bodeguero_nombre?: string;
   proyecto_nombre?: string | null;
   asset_uid_fisico?: string | null;
+  asset_nombre?: string | null;
 }
 
 export interface InventoryLog {

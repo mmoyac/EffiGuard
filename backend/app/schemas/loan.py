@@ -35,3 +35,4 @@ class ActiveLoanResponse(LoanResponse):
     bodeguero_nombre: str
     proyecto_nombre: str | None
     asset_uid_fisico: str | None = None
+    asset_nombre: str | None = None

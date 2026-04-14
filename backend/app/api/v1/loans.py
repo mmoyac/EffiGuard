@@ -31,6 +31,7 @@ async def list_loans(token: CurrentToken, session: DBSession, active_only: bool 
             bodeguero.nombre.label("bodeguero_nombre"),
             Project.nombre.label("proyecto_nombre"),
             Asset.uid_fisico.label("asset_uid_fisico"),
+            Asset.nombre.label("asset_nombre"),
         )
         .join(operario, Loan.user_id == operario.id)
         .join(bodeguero, Loan.bodeguero_id == bodeguero.id)
@@ -51,8 +52,9 @@ async def list_loans(token: CurrentToken, session: DBSession, active_only: bool 
             bodeguero_nombre=bodeguero_nombre,
             proyecto_nombre=proyecto_nombre,
             asset_uid_fisico=asset_uid_fisico,
+            asset_nombre=asset_nombre,
         )
-        for loan, user_nombre, user_rut, bodeguero_nombre, proyecto_nombre, asset_uid_fisico in result.all()
+        for loan, user_nombre, user_rut, bodeguero_nombre, proyecto_nombre, asset_uid_fisico, asset_nombre in result.all()
     ]
 
 
@@ -77,6 +79,7 @@ async def my_loans(token: CurrentToken, session: DBSession):
             bodeguero.nombre.label("bodeguero_nombre"),
             Project.nombre.label("proyecto_nombre"),
             Asset.uid_fisico.label("asset_uid_fisico"),
+            Asset.nombre.label("asset_nombre"),
         )
         .join(operario, Loan.user_id == operario.id)
         .join(bodeguero, Loan.bodeguero_id == bodeguero.id)
@@ -97,8 +100,9 @@ async def my_loans(token: CurrentToken, session: DBSession):
             bodeguero_nombre=bodeguero_nombre,
             proyecto_nombre=proyecto_nombre,
             asset_uid_fisico=asset_uid_fisico,
+            asset_nombre=asset_nombre,
         )
-        for loan, user_nombre, user_rut, bodeguero_nombre, proyecto_nombre, asset_uid_fisico in rows
+        for loan, user_nombre, user_rut, bodeguero_nombre, proyecto_nombre, asset_uid_fisico, asset_nombre in rows
     ]
 
 
@@ -135,6 +139,7 @@ async def get_active_loan_by_asset(asset_id: int, token: CurrentToken, session: 
             bodeguero.nombre.label("bodeguero_nombre"),
             Project.nombre.label("proyecto_nombre"),
             Asset.uid_fisico.label("asset_uid_fisico"),
+            Asset.nombre.label("asset_nombre"),
         )
         .join(operario, Loan.user_id == operario.id)
         .join(bodeguero, Loan.bodeguero_id == bodeguero.id)
@@ -148,7 +153,7 @@ async def get_active_loan_by_asset(asset_id: int, token: CurrentToken, session: 
     if not row:
         return None
 
-    loan, user_nombre, user_rut, bodeguero_nombre, proyecto_nombre, asset_uid_fisico = row
+    loan, user_nombre, user_rut, bodeguero_nombre, proyecto_nombre, asset_uid_fisico, asset_nombre = row
     return ActiveLoanResponse(
         **{c.key: getattr(loan, c.key) for c in Loan.__table__.columns},
         user_nombre=user_nombre,
@@ -156,6 +161,7 @@ async def get_active_loan_by_asset(asset_id: int, token: CurrentToken, session: 
         bodeguero_nombre=bodeguero_nombre,
         proyecto_nombre=proyecto_nombre,
         asset_uid_fisico=asset_uid_fisico,
+        asset_nombre=asset_nombre,
     )
 
 

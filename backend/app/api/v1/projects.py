@@ -40,3 +40,12 @@ async def deactivate_project(project_id: int, token: CurrentToken, session: DBSe
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proyecto no encontrado")
     return await repo.update(project, is_active=False)
+
+
+@router.patch("/{project_id}/activate", response_model=ProjectResponse)
+async def activate_project(project_id: int, token: CurrentToken, session: DBSession):
+    repo = BaseRepository(Project, session, token.tenant_id)
+    project = await repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proyecto no encontrado")
+    return await repo.update(project, is_active=True)

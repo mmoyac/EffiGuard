@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 
 from app.core.dependencies import CurrentToken, DBSession
 from app.core.security import hash_password
@@ -17,14 +18,24 @@ async def list_users(token: CurrentToken, session: DBSession, skip: int = 0, lim
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(data: UserCreate, token: CurrentToken, session: DBSession):
     repo = UserRepository(session, token.tenant_id)
-    return await repo.create(
-        rut=data.rut,
-        nombre=data.nombre,
-        email=data.email,
-        password_hash=hash_password(data.password),
-        role_id=data.role_id,
-        uid_credencial=data.uid_credencial,
-    )
+    try:
+        return await repo.create(
+            rut=data.rut,
+            nombre=data.nombre,
+            email=data.email,
+            password_hash=hash_password(data.password),
+            role_id=data.role_id,
+            uid_credencial=data.uid_credencial,
+        )
+    except IntegrityError as e:
+        err = str(e.orig)
+        if "uid_credencial" in err:
+            raise HTTPException(status_code=400, detail="Esa credencial ya está asignada a otro usuario")
+        if "email" in err:
+            raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
+        if "rut" in err:
+            raise HTTPException(status_code=400, detail="Ya existe un usuario con ese RUT")
+        raise HTTPException(status_code=400, detail="Error al crear usuario")
 
 
 @router.get("/scan/{uid_credencial}", response_model=UserResponse)

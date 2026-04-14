@@ -54,8 +54,10 @@ export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Pr
               {isConsumable ? <Layers size={24} className="text-orange-400" /> : <Package size={24} className="text-blue-400" />}
             </div>
             <div className="flex-1 min-w-0">
+              {asset.nombre && (
+                <p className="text-base font-semibold text-white truncate">{asset.nombre}</p>
+              )}
               <p className="font-mono text-sm text-gray-400 truncate">{asset.uid_fisico}</p>
-              <p className="text-xs text-gray-500 mt-0.5">Modelo ID: {asset.model_id}</p>
             </div>
           </div>
 

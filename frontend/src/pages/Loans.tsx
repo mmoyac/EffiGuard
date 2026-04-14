@@ -53,9 +53,14 @@ function LoanCard({ loan }: { loan: Loan }) {
       {/* Activo */}
       <div className="flex items-center gap-2 min-w-0">
         <ArrowLeftRight size={15} className="text-blue-400 flex-shrink-0" />
-        <span className="font-mono text-sm text-white font-semibold truncate">
-          {loan.asset_uid_fisico ?? `Activo #${loan.asset_id}`}
-        </span>
+        <div className="flex-1 min-w-0">
+          {loan.asset_nombre && (
+            <p className="text-sm text-white font-semibold truncate">{loan.asset_nombre}</p>
+          )}
+          <p className="font-mono text-xs text-gray-400 truncate">
+            {loan.asset_uid_fisico ?? `Activo #${loan.asset_id}`}
+          </p>
+        </div>
         <span className="text-xs text-gray-500 flex-shrink-0">· #{loan.id}</span>
       </div>
 
