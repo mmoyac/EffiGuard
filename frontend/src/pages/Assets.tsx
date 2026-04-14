@@ -1,9 +1,20 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "react-query";
-import { Package, Layers, AlertTriangle, Plus, ChevronDown, ChevronUp, Camera, Settings2, X } from "lucide-react";
+import { Package, Layers, AlertTriangle, Plus, ChevronDown, ChevronUp, Camera, Settings2, X, RefreshCw, Printer, Wifi } from "lucide-react";
+import { LabelPreviewModal } from "../components/LabelPreviewModal";
+
+/** Genera un UID corto con prefijo, sin caracteres ambiguos (0/O, 1/I/L) */
+function generateUid(prefix: string): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const array = new Uint8Array(8);
+  crypto.getRandomValues(array);
+  const code = Array.from(array).map((b) => chars[b % chars.length]).join("");
+  return `${prefix}-${code}`;
+}
 import { assetsApi, catalogApi, api } from "../services/api";
 import { CameraScanner } from "../components/scanner/CameraScanner";
+import { NFCScanner } from "../components/scanner/NFCScanner";
 import type { Asset } from "../types";
 
 const ESTADO: Record<number, { label: string; color: string }> = {
@@ -28,11 +39,13 @@ const EMPTY_MODEL = { brand_id: 0, nombre: "" };
 export function Assets() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const [labelPreview, setLabelPreview] = useState<{ title: string; subtitle?: string; uid: string } | null>(null);
   const [showCatalog, setShowCatalog] = useState(false);
   const [showAssetForm, setShowAssetForm] = useState(false);
   const [assetForm, setAssetForm] = useState(EMPTY_ASSET);
   const [assetError, setAssetError] = useState("");
   const [scanningUid, setScanningUid] = useState(false);
+  const [nfcScanningUid, setNfcScanningUid] = useState(false);
   const [tipoSeleccionado, setTipoSeleccionado] = useState(false);
   const uidInputRef = useRef<HTMLInputElement>(null);
 
@@ -185,18 +198,34 @@ export function Assets() {
                 {/* Código identificador */}
                 <div className="sm:col-span-2 space-y-1">
                   <label className="text-xs font-medium text-gray-300">Código identificador <span className="text-red-400">*</span></label>
-                  <p className="text-xs text-gray-500">El código QR, código de barras o tag RFID pegado físicamente en el activo</p>
+                  <p className="text-xs text-gray-500">
+                    {assetForm.tipo === "consumible"
+                      ? "Escanea o escribe el código de barras del producto"
+                      : "Puedes generar un código QR automático o escanear el tag RFID físico"}
+                  </p>
                   <div className="flex gap-2">
-                    <input ref={uidInputRef} required placeholder="Escanea o escribe el código" value={assetForm.uid_fisico}
+                    <input ref={uidInputRef} required placeholder={assetForm.tipo === "consumible" ? "Escanea el código de barras" : "Escanea o genera el código"} value={assetForm.uid_fisico}
                       onChange={(e) => setAssetForm({ ...assetForm, uid_fisico: e.target.value })}
                       onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                       className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 flex-1 font-mono" />
-                    <button type="button" onClick={() => setScanningUid((v) => !v)} title="Escanear con cámara"
+                    {assetForm.tipo === "herramienta" && (
+                      <button type="button" title="Generar código automático"
+                        onClick={() => setAssetForm((f) => ({ ...f, uid_fisico: generateUid("TOOL") }))}
+                        className="px-3 rounded-xl border border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors flex items-center min-h-[44px]">
+                        <RefreshCw size={15} />
+                      </button>
+                    )}
+                    <button type="button" onClick={() => { setScanningUid((v) => !v); setNfcScanningUid(false); }} title="Escanear con cámara"
                       className={`px-3 rounded-xl border transition-colors flex items-center min-h-[44px] ${scanningUid ? "bg-blue-600 border-blue-500 text-white" : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600"}`}>
                       <Camera size={16} />
                     </button>
+                    <button type="button" onClick={() => { setNfcScanningUid((v) => !v); setScanningUid(false); }} title="Escanear tag NFC/RFID"
+                      className={`px-3 rounded-xl border transition-colors flex items-center min-h-[44px] ${nfcScanningUid ? "bg-green-600 border-green-500 text-white" : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600"}`}>
+                      <Wifi size={16} />
+                    </button>
                   </div>
                   {scanningUid && <CameraScanner active={scanningUid} onScan={(uid) => { setAssetForm((f) => ({ ...f, uid_fisico: uid })); setScanningUid(false); }} />}
+                  {nfcScanningUid && <NFCScanner active={nfcScanningUid} onScan={(uid) => { setAssetForm((f) => ({ ...f, uid_fisico: uid })); setNfcScanningUid(false); }} />}
                 </div>
 
                 {/* Modelo */}
@@ -301,15 +330,25 @@ export function Assets() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {assets.map((a) => <AssetCard key={a.id} asset={a} models={models} brands={brands} onEdit={(a) => navigate(`/assets/${a.id}/edit`)} />)}
+              {assets.map((a) => <AssetCard key={a.id} asset={a} models={models} brands={brands} onEdit={(a) => navigate(`/assets/${a.id}/edit`)} onPrint={setLabelPreview} />)}
             </div>
           )}
+
+      {labelPreview && (
+        <LabelPreviewModal
+          title={labelPreview.title}
+          subtitle={labelPreview.subtitle}
+          uid={labelPreview.uid}
+          onClose={() => setLabelPreview(null)}
+        />
+      )}
     </div>
   );
 }
 
-function AssetCard({ asset, models, brands, onEdit }: {
+function AssetCard({ asset, models, brands, onEdit, onPrint }: {
   asset: Asset; models: AssetModel[]; brands: Brand[]; onEdit: (a: Asset) => void;
+  onPrint: (data: { title: string; subtitle?: string; uid: string }) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const estado = ESTADO[asset.estado_id] ?? { label: "Desconocido", color: "text-gray-400 bg-gray-800 border-gray-700" };
@@ -335,6 +374,14 @@ function AssetCard({ asset, models, brands, onEdit }: {
           <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${estado.color}`}>
             {estado.label}
           </span>
+          {!isConsumable && (
+            <button
+              onClick={() => onPrint({ title: asset.nombre ?? asset.uid_fisico, subtitle: [brand?.nombre, model?.nombre].filter(Boolean).join(" ") || undefined, uid: asset.uid_fisico })}
+              className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-gray-700 transition-colors"
+              title="Imprimir etiqueta">
+              <Printer size={14} />
+            </button>
+          )}
           <button onClick={() => onEdit(asset)}
             className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-gray-700 transition-colors"
             title="Editar">

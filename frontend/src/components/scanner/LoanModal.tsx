@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "react-query";
-import { X, ArrowRight, ScanLine, CheckCircle2, XCircle, Loader2, UserCheck } from "lucide-react";
+import { X, ArrowRight, ScanLine, CheckCircle2, XCircle, Loader2, UserCheck, Camera, Wifi } from "lucide-react";
 import { usersApi, projectsApi } from "../../services/api";
+import { CameraScanner } from "./CameraScanner";
+import { NFCScanner } from "./NFCScanner";
 import type { Asset, User } from "../../types";
 
 interface Project { id: number; nombre: string; is_active: boolean }
@@ -23,6 +25,8 @@ export function LoanModal({ asset, kitChildren = [], onConfirm, onClose }: Props
   const [loading, setLoading] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [manualUserId, setManualUserId] = useState<number | "">("");
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [nfcOpen, setNfcOpen] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -143,30 +147,79 @@ export function LoanModal({ asset, kitChildren = [], onConfirm, onClose }: Props
             {/* Estado: no resuelto aún */}
             {scanState !== "found" && (
               <div className="space-y-2">
-                <div className="relative">
-                  <ScanLine size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={credInput}
-                    onChange={(e) => {
-                      setCredInput(e.target.value);
-                      setScanState("idle");
-                    }}
-                    onKeyDown={handleCredKeyDown}
-                    placeholder="Escanea credencial del operario..."
-                    className="w-full bg-gray-700 text-white rounded-xl pl-9 pr-24 py-3 min-h-[48px] border border-gray-600 focus:border-blue-500 focus:outline-none text-sm placeholder:text-gray-500"
-                  />
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <ScanLine size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={credInput}
+                      onChange={(e) => {
+                        setCredInput(e.target.value);
+                        setScanState("idle");
+                      }}
+                      onKeyDown={handleCredKeyDown}
+                      placeholder="Escanea credencial del operario..."
+                      className="w-full bg-gray-700 text-white rounded-xl pl-9 pr-24 py-3 min-h-[48px] border border-gray-600 focus:border-blue-500 focus:outline-none text-sm placeholder:text-gray-500"
+                    />
+                    <button
+                      onClick={() => resolveCredential(credInput)}
+                      disabled={!credInput.trim() || scanState === "loading"}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      {scanState === "loading"
+                        ? <Loader2 size={14} className="animate-spin" />
+                        : "Verificar"}
+                    </button>
+                  </div>
                   <button
-                    onClick={() => resolveCredential(credInput)}
-                    disabled={!credInput.trim() || scanState === "loading"}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                    type="button"
+                    onClick={() => { setCameraOpen((v) => !v); setNfcOpen(false); }}
+                    className={`flex items-center justify-center w-12 min-h-[48px] rounded-xl border transition-colors ${
+                      cameraOpen
+                        ? "bg-blue-600 border-blue-500 text-white"
+                        : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600"
+                    }`}
+                    title="Escanear con cámara"
                   >
-                    {scanState === "loading"
-                      ? <Loader2 size={14} className="animate-spin" />
-                      : "Verificar"}
+                    <Camera size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setNfcOpen((v) => !v); setCameraOpen(false); }}
+                    className={`flex items-center justify-center w-12 min-h-[48px] rounded-xl border transition-colors ${
+                      nfcOpen
+                        ? "bg-green-600 border-green-500 text-white"
+                        : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600"
+                    }`}
+                    title="Escanear con NFC"
+                  >
+                    <Wifi size={18} />
                   </button>
                 </div>
+
+                {cameraOpen && (
+                  <CameraScanner
+                    id="camera-qr-operator"
+                    active={cameraOpen}
+                    onScan={(uid) => {
+                      setCameraOpen(false);
+                      setCredInput(uid);
+                      resolveCredential(uid);
+                    }}
+                  />
+                )}
+
+                {nfcOpen && (
+                  <NFCScanner
+                    active={nfcOpen}
+                    onScan={(uid) => {
+                      setNfcOpen(false);
+                      setCredInput(uid);
+                      resolveCredential(uid);
+                    }}
+                  />
+                )}
 
                 {scanState === "not_found" && (
                   <p className="text-xs text-red-400 flex items-center gap-1.5">

@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from "react";
-import { ScanLine, X, CheckCircle, AlertCircle, Keyboard, Camera } from "lucide-react";
+import { ScanLine, X, CheckCircle, AlertCircle, Keyboard, Camera, Wifi } from "lucide-react";
 import { useHIDScanner } from "../hooks/useHIDScanner";
 import { ScanResult } from "../components/scanner/ScanResult";
 import { LoanModal } from "../components/scanner/LoanModal";
 import { ConsumableModal } from "../components/scanner/ConsumableModal";
 import { CameraScanner } from "../components/scanner/CameraScanner";
+import { NFCScanner } from "../components/scanner/NFCScanner";
 import { LossModal } from "../components/scanner/LossModal";
 import { AdjustModal } from "../components/scanner/AdjustModal";
 import { assetsApi, loansApi } from "../services/api";
@@ -25,6 +26,7 @@ export function Scanner() {
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [loading, setLoading] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [nfcOpen, setNfcOpen] = useState(false);
   const [manualUid, setManualUid] = useState("");
   const manualInputRef = useRef<HTMLInputElement>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -150,17 +152,30 @@ export function Scanner() {
       <div className="flex items-center gap-3">
         <ScanLine size={28} className="text-blue-400" />
         <h2 className="text-2xl font-bold">Escáner</h2>
-        <button
-          onClick={() => setCameraOpen((v) => !v)}
-          className={`ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-            cameraOpen
-              ? "bg-blue-600 text-white"
-              : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-          }`}
-        >
-          <Camera size={16} />
-          {cameraOpen ? "Cerrar cámara" : "Usar cámara"}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => { setCameraOpen((v) => !v); setNfcOpen(false); }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+              cameraOpen
+                ? "bg-blue-600 text-white"
+                : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+            }`}
+          >
+            <Camera size={16} />
+            {cameraOpen ? "Cerrar" : "Cámara"}
+          </button>
+          <button
+            onClick={() => { setNfcOpen((v) => !v); setCameraOpen(false); }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+              nfcOpen
+                ? "bg-green-600 text-white"
+                : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+            }`}
+          >
+            <Wifi size={16} />
+            {nfcOpen ? "Cerrar" : "NFC"}
+          </button>
+        </div>
       </div>
 
       {/* Cámara */}
@@ -169,6 +184,17 @@ export function Scanner() {
           active={cameraOpen}
           onScan={(uid) => {
             setCameraOpen(false);
+            handleScan(uid);
+          }}
+        />
+      )}
+
+      {/* NFC */}
+      {nfcOpen && (
+        <NFCScanner
+          active={nfcOpen}
+          onScan={(uid) => {
+            setNfcOpen(false);
             handleScan(uid);
           }}
         />
