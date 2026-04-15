@@ -167,4 +167,4 @@ async def get_active_loan_by_asset(asset_id: int, token: CurrentToken, session: 
 
 @router.post("/{loan_id}/return", response_model=LoanResponse)
 async def return_loan(loan_id: int, data: LoanReturn, token: CurrentToken, session: DBSession):
-    return await loan_service.return_loan(loan_id, session, token.tenant_id, token.user_id, data.returning_user_id, data.observaciones)
+    return await loan_service.return_loan(loan_id, session, token.tenant_id, token.user_id, data.returning_user_id, data.observaciones, data.send_to_repair)

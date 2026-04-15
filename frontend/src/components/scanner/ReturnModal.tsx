@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X, ScanLine, CheckCircle2, XCircle, Loader2, UserCheck, RotateCcw, AlertTriangle, Camera, Wifi } from "lucide-react";
+import { X, ScanLine, CheckCircle2, XCircle, Loader2, UserCheck, RotateCcw, AlertTriangle, Camera, Wifi, Wrench } from "lucide-react";
 import { usersApi } from "../../services/api";
 import { CameraScanner } from "./CameraScanner";
 import { NFCScanner } from "./NFCScanner";
@@ -7,7 +7,7 @@ import type { Loan, User } from "../../types";
 
 interface Props {
   activeLoan: Loan;
-  onConfirm: (returningUserId: number, observaciones: string) => Promise<void>;
+  onConfirm: (returningUserId: number, observaciones: string, sendToRepair: boolean) => Promise<void>;
   onClose: () => void;
 }
 
@@ -19,6 +19,7 @@ export function ReturnModal({ activeLoan, onConfirm, onClose }: Props) {
   const [resolvedUser, setResolvedUser] = useState<User | null>(null);
   const [mismatch, setMismatch] = useState(false);
   const [observaciones, setObservaciones] = useState("");
+  const [sendToRepair, setSendToRepair] = useState(false);
   const [loading, setLoading] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [nfcOpen, setNfcOpen] = useState(false);
@@ -70,7 +71,7 @@ export function ReturnModal({ activeLoan, onConfirm, onClose }: Props) {
     if (!resolvedUser || mismatch) return;
     setLoading(true);
     try {
-      await onConfirm(resolvedUser.id, observaciones);
+      await onConfirm(resolvedUser.id, observaciones, sendToRepair);
     } finally {
       setLoading(false);
     }
@@ -254,6 +255,23 @@ export function ReturnModal({ activeLoan, onConfirm, onClose }: Props) {
               className="w-full bg-gray-700 text-white rounded-xl px-4 py-3 min-h-[48px] border border-gray-600 focus:border-green-500 focus:outline-none text-sm placeholder:text-gray-500"
             />
           </div>
+
+          {/* Toggle reparación */}
+          <button
+            type="button"
+            onClick={() => setSendToRepair((v) => !v)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
+              sendToRepair
+                ? "bg-yellow-900/30 border-yellow-700 text-yellow-300"
+                : "bg-gray-700/50 border-gray-600 text-gray-400 hover:border-gray-500 hover:text-gray-200"
+            }`}
+          >
+            <Wrench size={16} className={sendToRepair ? "text-yellow-400" : "text-gray-500"} />
+            <span className="flex-1 text-left text-sm font-medium">Enviar a reparación</span>
+            <span className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 ${sendToRepair ? "bg-yellow-500" : "bg-gray-600"}`}>
+              <span className={`w-4 h-4 rounded-full bg-white transition-transform shadow ${sendToRepair ? "translate-x-4" : "translate-x-0"}`} />
+            </span>
+          </button>
         </div>
 
         {/* Acciones */}
@@ -267,9 +285,14 @@ export function ReturnModal({ activeLoan, onConfirm, onClose }: Props) {
           <button
             onClick={handleConfirm}
             disabled={!resolvedUser || mismatch || loading}
-            className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl px-4 py-3 min-h-[48px] transition-colors"
+            className={`flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl px-4 py-3 min-h-[48px] transition-colors ${
+              sendToRepair ? "bg-yellow-600 hover:bg-yellow-500" : "bg-green-600 hover:bg-green-700"
+            }`}
           >
-            {loading ? "Procesando..." : (<><RotateCcw size={18} /> Confirmar Devolución</>)}
+            {loading ? "Procesando..." : sendToRepair
+              ? <><Wrench size={18} /> Devolver y enviar a reparación</>
+              : <><RotateCcw size={18} /> Confirmar Devolución</>
+            }
           </button>
         </div>
       </div>

@@ -12,6 +12,10 @@ import {
   RotateCcw,
   ShoppingCart,
   SlidersHorizontal,
+  Trash2,
+  User,
+  MessageSquare,
+  CheckCircle2,
 } from "lucide-react";
 import { familyColor } from "../utils/familyColors";
 import { api } from "../services/api";
@@ -23,20 +27,24 @@ const MOVIMIENTO: Record<
   string,
   { label: string; color: string; bg: string; Icon: React.ElementType; signo: "+" | "-" | "" }
 > = {
-  entrega:    { label: "Entrega",    color: "text-blue-400",   bg: "bg-blue-900/30 border-blue-800",   Icon: TrendingDown,  signo: "-" },
-  devolucion: { label: "Devolución", color: "text-green-400",  bg: "bg-green-900/30 border-green-800", Icon: RotateCcw,     signo: "+" },
+  entrega:    { label: "Entrega",    color: "text-blue-400",   bg: "bg-blue-900/30 border-blue-800",     Icon: TrendingDown,      signo: "-" },
+  devolucion: { label: "Devolución", color: "text-green-400",  bg: "bg-green-900/30 border-green-800",   Icon: RotateCcw,         signo: "+" },
   ajuste:     { label: "Ajuste",     color: "text-yellow-400", bg: "bg-yellow-900/30 border-yellow-800", Icon: SlidersHorizontal, signo: "" },
-  compra:     { label: "Compra",     color: "text-purple-400", bg: "bg-purple-900/30 border-purple-800", Icon: ShoppingCart, signo: "+" },
-  perdida:    { label: "Pérdida",    color: "text-red-400",    bg: "bg-red-900/30 border-red-800",     Icon: TrendingUp,    signo: "-" },
+  compra:     { label: "Compra",     color: "text-purple-400", bg: "bg-purple-900/30 border-purple-800", Icon: ShoppingCart,      signo: "+" },
+  perdida:    { label: "Pérdida",    color: "text-red-400",    bg: "bg-red-900/30 border-red-800",       Icon: TrendingUp,        signo: "-" },
+  merma:               { label: "Merma",       color: "text-amber-400",  bg: "bg-amber-900/30 border-amber-800",   Icon: Trash2,            signo: "-" },
+  reparacion:          { label: "Reparación",  color: "text-yellow-400", bg: "bg-yellow-900/30 border-yellow-800", Icon: Wrench,             signo: "" },
+  reparacion_completada: { label: "Reparado",  color: "text-green-400",  bg: "bg-green-900/30 border-green-800",   Icon: CheckCircle2,       signo: "" },
 };
 
-const TIPO_MOVIMIENTO_KEYS = ["entrega", "devolucion", "ajuste", "compra", "perdida"] as const;
+const TIPO_MOVIMIENTO_KEYS = ["entrega", "devolucion", "ajuste", "compra", "perdida", "merma", "reparacion", "reparacion_completada"] as const;
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function Inventory() {
   const [search, setSearch] = useState("");
   const [filterTipo, setFilterTipo] = useState<string>("all");
+  const [filterAsset, setFilterAsset] = useState<string>("all");
 
   const { data: logs = [], isLoading } = useQuery<InventoryLog[]>(
     "inventory-logs",
@@ -52,11 +60,23 @@ export function Inventory() {
     return counts;
   }, [logs]);
 
+  // Activos únicos para el selector de filtro
+  const assetOptions = useMemo(() => {
+    const seen = new Map<number, string>();
+    for (const log of logs) {
+      if (!seen.has(log.asset_id)) {
+        seen.set(log.asset_id, log.asset_nombre ?? `Activo #${log.asset_id}`);
+      }
+    }
+    return Array.from(seen.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [logs]);
+
   // Filtrado
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return logs.filter((log) => {
       if (filterTipo !== "all" && log.tipo_movimiento !== filterTipo) return false;
+      if (filterAsset !== "all" && log.asset_id !== Number(filterAsset)) return false;
       if (!q) return true;
       return (
         log.asset_nombre?.toLowerCase().includes(q) ||
@@ -67,7 +87,7 @@ export function Inventory() {
         String(log.asset_id).includes(q)
       );
     });
-  }, [logs, search, filterTipo]);
+  }, [logs, search, filterTipo, filterAsset]);
 
   if (isLoading) {
     return (
@@ -90,7 +110,7 @@ export function Inventory() {
       </div>
 
       {/* Tarjetas de resumen */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {TIPO_MOVIMIENTO_KEYS.map((tipo) => {
           const m = MOVIMIENTO[tipo];
           return (
@@ -112,8 +132,8 @@ export function Inventory() {
         })}
       </div>
 
-      {/* Barra de búsqueda y filtro */}
-      <div className="flex gap-2">
+      {/* Barra de búsqueda y filtros */}
+      <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
@@ -124,12 +144,22 @@ export function Inventory() {
             className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
         </div>
-        {filterTipo !== "all" && (
+        <select
+          value={filterAsset}
+          onChange={(e) => setFilterAsset(e.target.value)}
+          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 sm:w-56"
+        >
+          <option value="all">Todos los activos</option>
+          {assetOptions.map(([id, nombre]) => (
+            <option key={id} value={id}>{nombre}</option>
+          ))}
+        </select>
+        {(filterTipo !== "all" || filterAsset !== "all") && (
           <button
-            onClick={() => setFilterTipo("all")}
+            onClick={() => { setFilterTipo("all"); setFilterAsset("all"); }}
             className="text-xs px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:text-white hover:border-gray-500 transition"
           >
-            Limpiar filtro
+            Limpiar filtros
           </button>
         )}
       </div>
@@ -196,15 +226,29 @@ function LogCard({ log }: { log: InventoryLog }) {
               {log.asset_tipo === "consumible" ? "Consumible" : "Prestable"}
             </span>
           </div>
-          <p className="text-xs text-gray-500 truncate">
-            {fecha.toLocaleString("es-CL", {
-              day: "2-digit", month: "2-digit", year: "numeric",
-              hour: "2-digit", minute: "2-digit",
-            })}
-          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-xs text-gray-500">
+              {fecha.toLocaleString("es-CL", {
+                day: "2-digit", month: "2-digit", year: "numeric",
+                hour: "2-digit", minute: "2-digit",
+              })}
+            </p>
+            {log.user_nombre && (
+              <span className="flex items-center gap-1 text-xs text-gray-400">
+                <User size={11} className="flex-shrink-0" />
+                <span className="text-gray-300">{log.user_nombre}</span>
+              </span>
+            )}
+          </div>
           {log.operario_nombre && (
             <p className="text-xs text-gray-400 truncate">
               Operario: <span className="text-white font-medium">{log.operario_nombre}</span>
+            </p>
+          )}
+          {log.observaciones && (
+            <p className="flex items-center gap-1 text-xs text-gray-500 truncate">
+              <MessageSquare size={11} className="flex-shrink-0" />
+              <span className="truncate">{log.observaciones}</span>
             </p>
           )}
         </div>

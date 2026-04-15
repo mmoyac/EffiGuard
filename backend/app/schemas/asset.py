@@ -74,3 +74,17 @@ class AssetLoss(BaseModel):
 class AssetAdjust(BaseModel):
     stock_nuevo: int           # Nuevo valor absoluto de stock
     observaciones: str | None = None
+
+
+class AssetPurchase(BaseModel):
+    cantidad: int              # Unidades compradas (se suman al stock actual)
+    observaciones: str | None = None
+
+
+class AssetShrinkage(BaseModel):
+    cantidad: int              # Unidades a descontar (merma, vencimiento, daño)
+    observaciones: str | None = None
+
+
+class AssetRepairDone(BaseModel):
+    observaciones: str | None = None  # Ej: "Cambio de carbones, revisión eléctrica"

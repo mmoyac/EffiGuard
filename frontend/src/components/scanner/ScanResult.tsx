@@ -1,8 +1,8 @@
-import { Package, Layers, ArrowLeftRight, RotateCcw, AlertTriangle, User, FolderOpen, SlidersHorizontal } from "lucide-react";
+import { Package, Layers, ArrowLeftRight, RotateCcw, AlertTriangle, User, FolderOpen, Trash2, CheckCircle2 } from "lucide-react";
 import type { Asset, Loan } from "../../types";
 import { familyColor } from "../../utils/familyColors";
 
-type ActionType = "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "adjust";
+type ActionType = "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "merma" | "repair_done";
 
 interface Props {
   asset: Asset;
@@ -26,7 +26,10 @@ export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Pr
   const lowStock = asset.stock_actual <= asset.stock_minimo;
   const state = STATE_LABELS[asset.estado_id] ?? { label: "Desconocido", color: "text-gray-400 bg-gray-800 border-gray-700" };
 
+  const isInRepair = asset.estado_id === 3;
+
   function resolveAction(): ActionType {
+    if (isInRepair) return "repair_done";
     if (!isAvailable && !isOnField) return "unavailable";
     if (isConsumable) return "consumable";
     if (activeLoan) return "return";
@@ -144,11 +147,11 @@ export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Pr
         )}
         {isConsumable && (
           <button
-            onClick={() => onAction("adjust")}
-            className="flex-1 flex items-center justify-center gap-2 bg-gray-800 hover:bg-blue-900/30 border border-gray-700 hover:border-blue-800 text-gray-400 hover:text-blue-400 text-sm font-medium rounded-xl py-3 transition-colors"
+            onClick={() => onAction("merma")}
+            className="flex-1 flex items-center justify-center gap-2 bg-gray-800 hover:bg-amber-900/30 border border-gray-700 hover:border-amber-800 text-gray-400 hover:text-amber-400 text-sm font-medium rounded-xl py-3 transition-colors"
           >
-            <SlidersHorizontal size={15} />
-            Ajustar stock
+            <Trash2 size={15} />
+            Registrar merma
           </button>
         )}
       </div>
@@ -156,7 +159,7 @@ export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Pr
   );
 }
 
-type PrimaryAction = "loan" | "return" | "consumable" | "kit" | "unavailable";
+type PrimaryAction = "loan" | "return" | "consumable" | "kit" | "unavailable" | "repair_done";
 
 function ActionButton({
   action, activeLoan: _activeLoan, onAction,
@@ -194,6 +197,11 @@ function ActionButton({
       label: "Retirar Consumible",
       icon: <Layers size={22} />,
       color: "bg-orange-600 hover:bg-orange-700",
+    },
+    repair_done: {
+      label: "Marcar como reparada",
+      icon: <CheckCircle2 size={22} />,
+      color: "bg-yellow-600 hover:bg-yellow-500",
     },
   };
 

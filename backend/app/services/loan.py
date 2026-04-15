@@ -6,7 +6,7 @@ from app.repositories.inventory_log import InventoryLogRepository
 from app.repositories.loan import LoanRepository
 
 
-async def return_loan(loan_id: int, session: AsyncSession, tenant_id: int, user_id: int, returning_user_id: int, observaciones: str | None = None):
+async def return_loan(loan_id: int, session: AsyncSession, tenant_id: int, user_id: int, returning_user_id: int, observaciones: str | None = None, send_to_repair: bool = False):
     loan_repo = LoanRepository(session, tenant_id)
     asset_repo = AssetRepository(session, tenant_id)
     log_repo = InventoryLogRepository(session, tenant_id)
@@ -21,10 +21,11 @@ async def return_loan(loan_id: int, session: AsyncSession, tenant_id: int, user_
 
     await loan_repo.return_loan(loan)
 
-    # estado_id 1 = Disponible
+    # estado_id 1 = Disponible, 3 = En Reparación
+    estado_final = 3 if send_to_repair else 1
     asset = await asset_repo.get_with_children(loan.asset_id)
     if asset:
-        await asset_repo.update(asset, estado_id=1)
+        await asset_repo.update(asset, estado_id=estado_final)
         await log_repo.create(
             asset_id=asset.id,
             user_id=user_id,
@@ -32,13 +33,21 @@ async def return_loan(loan_id: int, session: AsyncSession, tenant_id: int, user_
             cantidad=1,
             observaciones=observaciones,
         )
+        if send_to_repair:
+            await log_repo.create(
+                asset_id=asset.id,
+                user_id=user_id,
+                tipo_movimiento="reparacion",
+                cantidad=1,
+                observaciones="Enviado a reparación al momento de la devolución",
+            )
 
         # Si es kit padre, devolver también los préstamos activos de todos los hijos
         for child in asset.children:
             child_loan = await loan_repo.get_active_by_asset(child.id)
             if child_loan:
                 await loan_repo.return_loan(child_loan)
-                await asset_repo.update(child, estado_id=1)
+                await asset_repo.update(child, estado_id=estado_final)
                 await log_repo.create(
                     asset_id=child.id,
                     user_id=user_id,
@@ -46,5 +55,13 @@ async def return_loan(loan_id: int, session: AsyncSession, tenant_id: int, user_
                     cantidad=1,
                     observaciones=observaciones,
                 )
+                if send_to_repair:
+                    await log_repo.create(
+                        asset_id=child.id,
+                        user_id=user_id,
+                        tipo_movimiento="reparacion",
+                        cantidad=1,
+                        observaciones="Enviado a reparación al momento de la devolución",
+                    )
 
     return loan

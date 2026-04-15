@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "react-query";
-import { Package, Layers, AlertTriangle, Plus, ChevronDown, ChevronUp, Camera, Settings2, X, RefreshCw, Printer, Wifi, Pencil, Trash2, Check, FileSpreadsheet } from "lucide-react";
+import { Package, Layers, AlertTriangle, Plus, ChevronDown, ChevronUp, Camera, Settings2, X, RefreshCw, Printer, Wifi, Pencil, Trash2, Check, FileSpreadsheet, ShoppingCart } from "lucide-react";
 import { LabelPreviewModal } from "../components/LabelPreviewModal";
 import { ImportAssetsModal } from "../components/assets/ImportAssetsModal";
 
@@ -429,12 +429,32 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
   asset: Asset; models: AssetModel[]; brands: Brand[]; onEdit: (a: Asset) => void;
   onPrint: (data: { title: string; subtitle?: string; uid: string }) => void;
 }) {
+  const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
+  const [showPurchase, setShowPurchase] = useState(false);
+  const [purchaseQty, setPurchaseQty] = useState(1);
+  const [purchaseObs, setPurchaseObs] = useState("");
+  const [purchaseError, setPurchaseError] = useState("");
+
   const estado = ESTADO[asset.estado_id] ?? { label: "Desconocido", color: "text-gray-400 bg-gray-800 border-gray-700" };
   const isConsumable = asset.family.comportamiento === "consumible";
   const lowStock = isConsumable && asset.stock_actual <= asset.stock_minimo;
   const model = models.find((m) => m.id === asset.model_id);
   const brand = model ? brands.find((b) => b.id === model.brand_id) : null;
+
+  const purchase = useMutation(
+    () => api.post(`/assets/${asset.id}/purchase`, { cantidad: purchaseQty, observaciones: purchaseObs || null }),
+    {
+      onSuccess: () => {
+        qc.invalidateQueries("assets");
+        setShowPurchase(false);
+        setPurchaseQty(1);
+        setPurchaseObs("");
+        setPurchaseError("");
+      },
+      onError: (e: any) => setPurchaseError(e?.response?.data?.detail ?? "Error al registrar compra"),
+    }
+  );
 
   return (
     <div className="bg-gray-800 rounded-2xl border border-gray-700 p-4 space-y-3">
@@ -472,14 +492,67 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
       </div>
 
       {isConsumable && (
-        <div className={`flex items-center justify-between rounded-xl px-3 py-2 ${lowStock ? "bg-yellow-900/20 border border-yellow-800" : "bg-gray-700/50"}`}>
-          <div className="flex items-center gap-2">
-            {lowStock && <AlertTriangle size={14} className="text-yellow-400" />}
-            <span className="text-xs text-gray-400">Stock actual / mínimo</span>
+        <div className="space-y-2">
+          <div className={`flex items-center justify-between rounded-xl px-3 py-2 ${lowStock ? "bg-yellow-900/20 border border-yellow-800" : "bg-gray-700/50"}`}>
+            <div className="flex items-center gap-2">
+              {lowStock && <AlertTriangle size={14} className="text-yellow-400" />}
+              <span className="text-xs text-gray-400">Stock actual / mínimo</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-sm font-bold ${lowStock ? "text-yellow-400" : "text-green-400"}`}>
+                {asset.stock_actual} / {asset.stock_minimo}
+              </span>
+              <button
+                onClick={() => { setShowPurchase((v) => !v); setPurchaseError(""); }}
+                title="Ingresar compra"
+                className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors min-h-[28px] ${
+                  showPurchase
+                    ? "bg-green-700 border-green-600 text-white"
+                    : "bg-gray-700 border-gray-600 text-gray-400 hover:text-white hover:border-gray-500"
+                }`}
+              >
+                <ShoppingCart size={12} /> Compra
+              </button>
+            </div>
           </div>
-          <span className={`text-sm font-bold ${lowStock ? "text-yellow-400" : "text-green-400"}`}>
-            {asset.stock_actual} / {asset.stock_minimo}
-          </span>
+
+          {showPurchase && (
+            <form
+              onSubmit={(e) => { e.preventDefault(); purchase.mutate(); }}
+              className="bg-gray-700/60 border border-gray-600 rounded-xl px-3 py-3 space-y-2"
+            >
+              <p className="text-xs font-semibold text-green-400">Ingresar compra</p>
+              {purchaseError && (
+                <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 px-2 py-1.5 rounded-lg">{purchaseError}</p>
+              )}
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-400 flex-shrink-0">Cantidad</label>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => setPurchaseQty((q) => Math.max(1, q - 1))}
+                    className="w-7 h-7 rounded-lg bg-gray-600 hover:bg-gray-500 text-white text-sm font-bold flex items-center justify-center transition-colors">−</button>
+                  <span className="w-10 text-center text-sm font-bold text-white">{purchaseQty}</span>
+                  <button type="button" onClick={() => setPurchaseQty((q) => q + 1)}
+                    className="w-7 h-7 rounded-lg bg-gray-600 hover:bg-gray-500 text-white text-sm font-bold flex items-center justify-center transition-colors">+</button>
+                </div>
+              </div>
+              <input
+                placeholder="Observaciones (opcional — proveedor, N° factura…)"
+                value={purchaseObs}
+                onChange={(e) => setPurchaseObs(e.target.value)}
+                className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-green-500 w-full"
+              />
+              <div className="flex gap-2">
+                <button type="submit" disabled={purchase.isLoading}
+                  className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-xl transition-colors min-h-[36px]">
+                  {purchase.isLoading ? "Guardando..." : `Ingresar ${purchaseQty} unidad${purchaseQty !== 1 ? "es" : ""}`}
+                </button>
+                <button type="button" onClick={() => { setShowPurchase(false); setPurchaseError(""); }}
+                  className="px-3 py-2 rounded-xl text-xs text-gray-400 hover:bg-gray-600 transition-colors min-h-[36px]">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
 

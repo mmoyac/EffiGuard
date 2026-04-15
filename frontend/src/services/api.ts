@@ -69,6 +69,8 @@ export const assetsApi = {
   update: (id: number, data: object) => api.patch(`/assets/${id}`, data),
   reportLoss: (id: number, data: object) => api.post(`/assets/${id}/loss`, data),
   adjustStock: (id: number, data: object) => api.post(`/assets/${id}/adjust`, data),
+  reportShrinkage: (id: number, data: object) => api.post(`/assets/${id}/shrinkage`, data),
+  repairDone: (id: number, data: object) => api.post(`/assets/${id}/repair-done`, data),
   importTemplate: () => api.get("/assets/import/template", { responseType: "blob" }),
   importValidate: (file: File) => {
     const form = new FormData();
@@ -85,7 +87,7 @@ export const assetsApi = {
 export const loansApi = {
   list: (activeOnly = false) => api.get(`/loans?active_only=${activeOnly}`),
   create: (data: object) => api.post("/loans", data),
-  return: (id: number, returningUserId: number, obs?: string) => api.post(`/loans/${id}/return`, { returning_user_id: returningUserId, observaciones: obs }),
+  return: (id: number, returningUserId: number, obs?: string, sendToRepair?: boolean) => api.post(`/loans/${id}/return`, { returning_user_id: returningUserId, observaciones: obs, send_to_repair: sendToRepair ?? false }),
   withdrawConsumable: (data: object) => api.post("/loans/consumables/withdraw", data),
   activeByAsset: (assetId: number) => api.get(`/loans/active/asset/${assetId}`),
 };

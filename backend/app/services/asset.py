@@ -5,7 +5,7 @@ from app.models.asset_state import AssetState
 from app.repositories.asset import AssetRepository
 from app.repositories.inventory_log import InventoryLogRepository
 from app.repositories.loan import LoanRepository
-from app.schemas.asset import AssetAdjust, AssetCreate, AssetLoss, AssetUpdate, ConsumableWithdraw
+from app.schemas.asset import AssetAdjust, AssetCreate, AssetLoss, AssetPurchase, AssetRepairDone, AssetShrinkage, AssetUpdate, ConsumableWithdraw
 from app.schemas.inventory import InventoryLogResponse
 from app.schemas.loan import LoanCreate
 
@@ -125,6 +125,75 @@ async def adjust_stock(asset_id: int, data: AssetAdjust, session: AsyncSession, 
         tipo_movimiento="ajuste",
         cantidad=abs(diferencia),
         observaciones=data.observaciones or (f"Ajuste: {asset.stock_actual} → {data.stock_nuevo}"),
+    )
+
+
+async def repair_done(asset_id: int, data: AssetRepairDone, session: AsyncSession, tenant_id: int, user_id: int):
+    """Marca la herramienta como reparada: vuelve a Disponible y registra log."""
+    asset_repo = AssetRepository(session, tenant_id)
+    log_repo = InventoryLogRepository(session, tenant_id)
+
+    asset = await asset_repo.get(asset_id)
+    if not asset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
+    if asset.estado_id != 3:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El activo no está en estado 'En Reparación'")
+
+    await asset_repo.update(asset, estado_id=1)  # 1 = Disponible
+    return await log_repo.create(
+        asset_id=asset_id,
+        user_id=user_id,
+        tipo_movimiento="reparacion_completada",
+        cantidad=1,
+        observaciones=data.observaciones,
+    )
+
+
+async def purchase_stock(asset_id: int, data: AssetPurchase, session: AsyncSession, tenant_id: int, user_id: int):
+    """Ingresa una compra: suma cantidad al stock y registra log tipo 'compra'."""
+    asset_repo = AssetRepository(session, tenant_id)
+    log_repo = InventoryLogRepository(session, tenant_id)
+
+    asset = await asset_repo.get(asset_id)
+    if not asset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
+    if asset.family.comportamiento != "consumible":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Solo aplica a consumibles")
+    if data.cantidad <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La cantidad debe ser mayor a 0")
+
+    await asset_repo.update(asset, stock_actual=asset.stock_actual + data.cantidad)
+    return await log_repo.create(
+        asset_id=asset_id,
+        user_id=user_id,
+        tipo_movimiento="compra",
+        cantidad=data.cantidad,
+        observaciones=data.observaciones,
+    )
+
+
+async def shrinkage_stock(asset_id: int, data: AssetShrinkage, session: AsyncSession, tenant_id: int, user_id: int):
+    """Registra merma: descuenta cantidad por daño, vencimiento o corrección de conteo."""
+    asset_repo = AssetRepository(session, tenant_id)
+    log_repo = InventoryLogRepository(session, tenant_id)
+
+    asset = await asset_repo.get(asset_id)
+    if not asset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
+    if asset.family.comportamiento != "consumible":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Solo aplica a consumibles")
+    if data.cantidad <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La cantidad debe ser mayor a 0")
+    if asset.stock_actual < data.cantidad:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Stock insuficiente para registrar la merma")
+
+    await asset_repo.update(asset, stock_actual=asset.stock_actual - data.cantidad)
+    return await log_repo.create(
+        asset_id=asset_id,
+        user_id=user_id,
+        tipo_movimiento="merma",
+        cantidad=data.cantidad,
+        observaciones=data.observaciones,
     )
 
 

@@ -8,11 +8,11 @@ import { CameraScanner } from "../components/scanner/CameraScanner";
 import { NFCScanner } from "../components/scanner/NFCScanner";
 import { ReturnModal } from "../components/scanner/ReturnModal";
 import { LossModal } from "../components/scanner/LossModal";
-import { AdjustModal } from "../components/scanner/AdjustModal";
+import { MermaModal } from "../components/scanner/MermaModal";
 import { assetsApi, loansApi } from "../services/api";
 import type { Asset, Loan } from "../types";
 
-type ModalType = "loan" | "return" | "consumable" | "kit" | "loss" | "adjust" | null;
+type ModalType = "loan" | "return" | "consumable" | "kit" | "loss" | "merma" | "repair_done" | null;
 
 type FeedbackState =
   | { type: "success"; message: string }
@@ -97,11 +97,11 @@ export function Scanner() {
     resetScan();
   }
 
-  async function handleReturnConfirm(returningUserId: number, observaciones: string) {
+  async function handleReturnConfirm(returningUserId: number, observaciones: string, sendToRepair: boolean) {
     if (!activeLoan) return;
-    await loansApi.return(activeLoan.id, returningUserId, observaciones || undefined);
+    await loansApi.return(activeLoan.id, returningUserId, observaciones || undefined, sendToRepair);
     setModal(null);
-    showFeedback("success", "Devolución registrada correctamente");
+    showFeedback("success", sendToRepair ? "Devolución registrada — herramienta enviada a reparación" : "Devolución registrada correctamente");
     resetScan();
   }
 
@@ -130,16 +130,24 @@ export function Scanner() {
     resetScan();
   }
 
-  async function handleAdjustConfirm(stockNuevo: number, observaciones: string) {
+  async function handleRepairDone() {
     if (!scannedAsset) return;
-    await assetsApi.adjustStock(scannedAsset.id, { stock_nuevo: stockNuevo, observaciones: observaciones || undefined });
-    setModal(null);
-    showFeedback("success", `Stock ajustado a ${stockNuevo} unidades`);
+    await assetsApi.repairDone(scannedAsset.id, {});
+    showFeedback("success", "Herramienta marcada como reparada — disponible en bodega");
     resetScan();
   }
 
-  function handleAction(type: "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "adjust") {
+  async function handleMermaConfirm(cantidad: number, observaciones: string) {
+    if (!scannedAsset) return;
+    await assetsApi.reportShrinkage(scannedAsset.id, { cantidad, observaciones: observaciones || undefined });
+    setModal(null);
+    showFeedback("success", `${cantidad} unidad${cantidad !== 1 ? "es" : ""} registrada${cantidad !== 1 ? "s" : ""} como merma`);
+    resetScan();
+  }
+
+  function handleAction(type: "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "merma" | "repair_done") {
     if (type === "unavailable") return;
+    if (type === "repair_done") { handleRepairDone(); return; }
     setModal(type);
   }
 
@@ -290,10 +298,10 @@ export function Scanner() {
           onClose={() => setModal(null)}
         />
       )}
-      {modal === "adjust" && scannedAsset && (
-        <AdjustModal
+      {modal === "merma" && scannedAsset && (
+        <MermaModal
           asset={scannedAsset}
-          onConfirm={handleAdjustConfirm}
+          onConfirm={handleMermaConfirm}
           onClose={() => setModal(null)}
         />
       )}

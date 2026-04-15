@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 
 from app.core.dependencies import CurrentToken, DBSession
 from app.repositories.asset import AssetRepository
-from app.schemas.asset import AssetAdjust, AssetCreate, AssetLoss, AssetResponse, AssetUpdate
+from app.schemas.asset import AssetAdjust, AssetCreate, AssetLoss, AssetPurchase, AssetRepairDone, AssetShrinkage, AssetResponse, AssetUpdate
 from app.schemas.inventory import InventoryLogResponse
 from app.services import asset as asset_service
 
@@ -57,3 +57,21 @@ async def report_loss(asset_id: int, data: AssetLoss, token: CurrentToken, sessi
 async def adjust_stock(asset_id: int, data: AssetAdjust, token: CurrentToken, session: DBSession):
     """Ajusta el stock de un consumible a un valor absoluto."""
     return await asset_service.adjust_stock(asset_id, data, session, token.tenant_id, token.user_id)
+
+
+@router.post("/{asset_id}/purchase", response_model=InventoryLogResponse, status_code=status.HTTP_201_CREATED)
+async def purchase_stock(asset_id: int, data: AssetPurchase, token: CurrentToken, session: DBSession):
+    """Registra una compra: suma unidades al stock del consumible."""
+    return await asset_service.purchase_stock(asset_id, data, session, token.tenant_id, token.user_id)
+
+
+@router.post("/{asset_id}/shrinkage", response_model=InventoryLogResponse, status_code=status.HTTP_201_CREATED)
+async def shrinkage_stock(asset_id: int, data: AssetShrinkage, token: CurrentToken, session: DBSession):
+    """Registra merma: descuenta unidades por daño, vencimiento o corrección de conteo hacia abajo."""
+    return await asset_service.shrinkage_stock(asset_id, data, session, token.tenant_id, token.user_id)
+
+
+@router.post("/{asset_id}/repair-done", response_model=InventoryLogResponse, status_code=status.HTTP_201_CREATED)
+async def repair_done(asset_id: int, data: AssetRepairDone, token: CurrentToken, session: DBSession):
+    """Marca la herramienta como reparada: cambia estado a Disponible y registra log."""
+    return await asset_service.repair_done(asset_id, data, session, token.tenant_id, token.user_id)

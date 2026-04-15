@@ -13,6 +13,7 @@ class LoanCreate(BaseModel):
 class LoanReturn(BaseModel):
     returning_user_id: int        # Operario que devuelve — debe coincidir con quien retiró
     observaciones: str | None = None
+    send_to_repair: bool = False  # Si True, deja la herramienta en estado "En Reparación"
 
 
 class LoanResponse(BaseModel):
