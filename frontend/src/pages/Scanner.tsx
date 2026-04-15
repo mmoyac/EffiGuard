@@ -56,8 +56,8 @@ export function Scanner() {
       setScannedAsset(asset);
       setKitChildren(children);
 
-      // Consultar préstamo activo para herramientas
-      if (asset.tipo === "herramienta") {
+      // Consultar préstamo activo para activos prestables
+      if (asset.family.comportamiento === "prestable") {
         const { data: loan } = await loansApi.activeByAsset(asset.id);
         setActiveLoan(loan ?? null);
       }
