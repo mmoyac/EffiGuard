@@ -40,6 +40,7 @@ interface NFCScannerProps {
 export function NFCScanner({ onScan, active }: NFCScannerProps) {
   const [status, setStatus] = useState<"checking" | "scanning" | "unsupported" | "error">("checking");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!active) return;
@@ -93,7 +94,7 @@ export function NFCScanner({ onScan, active }: NFCScannerProps) {
       mounted = false;
       controller.abort();
     };
-  }, [active, onScan]);
+  }, [active, onScan, retryCount]);
 
   if (!active) return null;
 
@@ -110,10 +111,25 @@ export function NFCScanner({ onScan, active }: NFCScannerProps) {
   }
 
   if (status === "error") {
+    const isPermission = errorMsg?.toLowerCase().includes("permiso");
     return (
-      <div className="flex flex-col items-center gap-2 py-4 text-red-400 text-sm text-center px-4">
+      <div className="flex flex-col items-center gap-3 py-4 text-red-400 text-sm text-center px-4">
         <WifiOff size={28} />
-        <p>{errorMsg}</p>
+        <p className="font-semibold">{errorMsg}</p>
+        {isPermission && (
+          <ol className="text-xs text-gray-400 max-w-xs text-left space-y-1 list-decimal list-inside">
+            <li>Toca el menú <span className="text-white font-medium">⋮</span> (tres puntos) de la app</li>
+            <li>Selecciona <span className="text-white font-medium">Configuración del sitio</span></li>
+            <li>Busca <span className="text-white font-medium">NFC</span> y cámbialo a <span className="text-white font-medium">Permitir</span></li>
+            <li>Vuelve y toca <span className="text-white font-medium">Reintentar</span></li>
+          </ol>
+        )}
+        <button
+          onClick={() => { setErrorMsg(null); setRetryCount((c) => c + 1); }}
+          className="mt-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-lg transition-colors"
+        >
+          Reintentar
+        </button>
       </div>
     );
   }

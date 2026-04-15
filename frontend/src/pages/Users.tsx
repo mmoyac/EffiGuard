@@ -243,43 +243,51 @@ export function Users() {
           {users.map((u) => {
             const role = ROLES[u.role_id] ?? { label: `Rol ${u.role_id}`, color: "text-gray-400 bg-gray-800 border-gray-700" };
             return (
-              <div key={u.id} className={`bg-gray-800 rounded-xl border px-4 py-3 flex items-center gap-3 min-w-0 ${u.is_active ? "border-gray-700" : "border-gray-700/40 opacity-60"}`}>
-                <div className="w-9 h-9 bg-gray-700 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Shield size={16} className="text-gray-400" />
+              <div key={u.id} className={`bg-gray-800 rounded-xl border px-4 py-3 min-w-0 ${u.is_active ? "border-gray-700" : "border-gray-700/40 opacity-60"}`}>
+                {/* Fila 1: avatar + nombre + rol */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 bg-gray-700 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <Shield size={16} className="text-gray-400" />
+                  </div>
+                  <p className="flex-1 text-sm font-semibold text-white truncate">{u.nombre}</p>
+                  <span className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border ${role.color}`}>
+                    {role.label}
+                  </span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{u.nombre}</p>
-                  <p className="text-xs text-gray-500 truncate">{u.rut} · {u.email}</p>
-                  {u.uid_credencial && (
-                    <p className="text-xs font-mono text-gray-500 truncate">{u.uid_credencial}</p>
-                  )}
+                {/* Fila 2: rut/email/uid + botones de acción */}
+                <div className="flex items-center gap-2 mt-1.5 pl-12 min-w-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-500 truncate">{u.rut} · {u.email}</p>
+                    {u.uid_credencial && (
+                      <p className="text-xs font-mono text-gray-500 truncate">{u.uid_credencial}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {u.uid_credencial && (
+                      <button
+                        onClick={() => setLabelPreview({ title: u.nombre, subtitle: role.label, uid: u.uid_credencial! })}
+                        title="Imprimir credencial"
+                        className="p-2 rounded-lg text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
+                      >
+                        <Printer size={15} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openEdit(u)}
+                      title="Editar usuario"
+                      className="p-2 rounded-lg text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      onClick={() => toggleActive.mutate({ id: u.id, is_active: !u.is_active })}
+                      title={u.is_active ? "Desactivar" : "Activar"}
+                      className="p-2 rounded-lg text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
+                    >
+                      {u.is_active ? <UserCheck size={16} className="text-green-400" /> : <UserX size={16} className="text-red-400" />}
+                    </button>
+                  </div>
                 </div>
-                <span className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border ${role.color}`}>
-                  {role.label}
-                </span>
-                {u.uid_credencial && (
-                  <button
-                    onClick={() => setLabelPreview({ title: u.nombre, subtitle: role.label, uid: u.uid_credencial! })}
-                    title="Imprimir credencial"
-                    className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
-                  >
-                    <Printer size={15} />
-                  </button>
-                )}
-                <button
-                  onClick={() => openEdit(u)}
-                  title="Editar usuario"
-                  className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
-                >
-                  <Pencil size={15} />
-                </button>
-                <button
-                  onClick={() => toggleActive.mutate({ id: u.id, is_active: !u.is_active })}
-                  title={u.is_active ? "Desactivar" : "Activar"}
-                  className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
-                >
-                  {u.is_active ? <UserCheck size={16} className="text-green-400" /> : <UserX size={16} className="text-red-400" />}
-                </button>
               </div>
             );
           })}
