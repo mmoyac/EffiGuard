@@ -2,9 +2,12 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "react-query";
 import { ArrowLeft, Package, Layers, Settings2, Package2, Camera, RefreshCw } from "lucide-react";
-import { assetsApi, catalogApi } from "../services/api";
+import { assetsApi, catalogApi, api } from "../services/api";
+import { familyColor } from "../utils/familyColors";
+import type { AssetFamily } from "../types";
 import { CameraScanner } from "../components/scanner/CameraScanner";
 import type { Asset } from "../types";
+import { Link2 } from "lucide-react";
 
 function generateUid(prefix: string): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -37,6 +40,12 @@ export function AssetEdit() {
   const { data: states = [] } = useQuery<State[]>("catalog-states", () =>
     catalogApi.states().then((r) => r.data)
   );
+  const { data: allAssets = [] } = useQuery<Asset[]>("assets", () =>
+    assetsApi.list().then((r) => r.data)
+  );
+  const { data: families = [] } = useQuery<AssetFamily[]>("asset-families", () =>
+    api.get("/asset-families").then((r) => r.data)
+  );
 
   if (isLoading) {
     return (
@@ -63,6 +72,8 @@ export function AssetEdit() {
       states={states}
       models={models}
       brands={brands}
+      families={families}
+      allAssets={allAssets}
       onSaved={() => {
         qc.invalidateQueries("assets");
         qc.invalidateQueries(["asset", id]);
@@ -73,27 +84,36 @@ export function AssetEdit() {
   );
 }
 
-function EditForm({ asset, states, models, brands, onSaved, onBack }: {
+function EditForm({ asset, states, models, brands, families, allAssets, onSaved, onBack }: {
   asset: Asset;
   states: State[];
   models: AssetModel[];
   brands: Brand[];
+  families: AssetFamily[];
+  allAssets: Asset[];
   onSaved: () => void;
   onBack: () => void;
 }) {
-  const isConsumable = asset.tipo === "consumible";
   const model = models.find((m) => m.id === asset.model_id);
   const brand = model ? brands.find((b) => b.id === model.brand_id) : null;
 
   const [form, setForm] = useState({
     uid_fisico: asset.uid_fisico,
     nombre: asset.nombre ?? "",
+    family_id: asset.family_id,
     model_id: asset.model_id ? String(asset.model_id) : "",
     estado_id: asset.estado_id,
+    parent_asset_id: asset.parent_asset_id ? String(asset.parent_asset_id) : "",
     stock_minimo: asset.stock_minimo,
     valor_reposicion: asset.valor_reposicion ? String(asset.valor_reposicion) : "",
     proxima_mantencion: asset.proxima_mantencion ?? "",
+    dias_max_prestamo: asset.dias_max_prestamo ? String(asset.dias_max_prestamo) : "",
   });
+  const selectedFamily = families.find((f) => f.id === form.family_id) ?? asset.family;
+  const isConsumableForm = selectedFamily.comportamiento === "consumible";
+  const kitOptions = allAssets.filter(
+    (a) => a.family.comportamiento === "prestable" && a.parent_asset_id === null && a.id !== asset.id
+  );
   const [scanningUid, setScanningUid] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -115,11 +135,14 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
       await assetsApi.update(asset.id, {
         uid_fisico: form.uid_fisico.trim() || undefined,
         nombre: form.nombre.trim() || null,
+        family_id: form.family_id,
         model_id: form.model_id ? Number(form.model_id) : null,
+        ...(!isConsumableForm && { parent_asset_id: form.parent_asset_id ? Number(form.parent_asset_id) : null }),
         estado_id: Number(form.estado_id),
         stock_minimo: Number(form.stock_minimo),
         valor_reposicion: form.valor_reposicion ? Number(form.valor_reposicion) : null,
         proxima_mantencion: form.proxima_mantencion || null,
+        dias_max_prestamo: form.dias_max_prestamo ? Number(form.dias_max_prestamo) : null,
       });
       onSaved();
     } catch (err: any) {
@@ -158,16 +181,16 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
         </button>
         <div>
           <h2 className="text-xl font-bold text-white">Editar activo</h2>
-          <p className="text-xs text-gray-500 capitalize">{asset.tipo}</p>
+          <p className="text-xs text-gray-500">{asset.family.nombre}</p>
         </div>
       </div>
 
       {/* Info del activo */}
       <div className="bg-gray-800 border border-gray-700 rounded-2xl p-4 flex items-center gap-4">
         <div className="w-12 h-12 bg-gray-700 rounded-xl flex items-center justify-center flex-shrink-0">
-          {isConsumable
-            ? <Layers size={22} className="text-orange-400" />
-            : <Package size={22} className="text-blue-400" />}
+          {isConsumableForm
+            ? <Layers size={22} className={familyColor(selectedFamily.color).icon} />
+            : <Package size={22} className={familyColor(selectedFamily.color).icon} />}
         </div>
         <div className="min-w-0">
           {asset.nombre && <p className="text-base font-semibold text-white truncate">{asset.nombre}</p>}
@@ -189,11 +212,33 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
           <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 px-3 py-2 rounded-lg">{error}</p>
         )}
 
+        {/* Familia */}
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-300">Familia</label>
+          <div className="flex flex-wrap gap-2">
+            {families.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, family_id: f.id }))}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
+                  form.family_id === f.id
+                    ? `${familyColor(f.color).badge} border-current`
+                    : "bg-gray-700 border-gray-600 text-gray-400 hover:border-gray-500 hover:text-white"
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${familyColor(f.color).swatch}`} />
+                {f.nombre}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Código identificador */}
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-300">Código identificador <span className="text-red-400">*</span></label>
           <p className="text-xs text-gray-500">
-            {isConsumable ? "Código de barras del producto" : "QR o tag RFID — puedes generar uno nuevo o escanear el físico"}
+            {isConsumableForm ? "Código de barras del producto" : "QR o tag RFID — puedes generar uno nuevo o escanear el físico"}
           </p>
           <div className="flex gap-2">
             <input
@@ -203,7 +248,7 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
               onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
               className="flex-1 bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono"
             />
-            {!isConsumable && (
+            {!isConsumableForm && (
               <button type="button" title="Generar nuevo código"
                 onClick={() => setForm((f) => ({ ...f, uid_fisico: generateUid("TOOL") }))}
                 className="px-3 rounded-xl border border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors flex items-center min-h-[44px]">
@@ -230,7 +275,7 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
             type="text"
             value={form.nombre}
             onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-            placeholder={isConsumable ? "Ej: Clavos 3 pulgadas" : "Ej: Taladro grande bodega norte"}
+            placeholder={isConsumableForm ? "Ej: Clavos 3 pulgadas" : `Ej: ${asset.family.nombre} grande bodega norte`}
             className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
         </div>
@@ -238,12 +283,12 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
         {/* Modelo */}
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-300">
-            Modelo {isConsumable && <span className="text-gray-500 font-normal">(opcional)</span>}
+            Modelo {isConsumableForm && <span className="text-gray-500 font-normal">(opcional)</span>}
           </label>
           <select
             value={form.model_id}
             onChange={(e) => setForm({ ...form, model_id: e.target.value })}
-            required={!isConsumable}
+            required={!isConsumableForm}
             className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
           >
             <option value="">Sin modelo</option>
@@ -270,7 +315,7 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
         </div>
 
         {/* Consumible: stock mínimo */}
-        {isConsumable && (
+        {isConsumableForm && (
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-300">Cantidad mínima</label>
             <p className="text-xs text-gray-500">Alerta de stock bajo si cae por debajo de este número</p>
@@ -297,8 +342,31 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
           />
         </div>
 
+        {/* Prestable: kit padre */}
+        {!isConsumableForm && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-300 flex items-center gap-1.5">
+              <Link2 size={13} className="text-purple-400" />
+              Pertenece a un kit <span className="text-gray-500 font-normal">(opcional)</span>
+            </label>
+            <p className="text-xs text-gray-500">Si este activo es parte de un kit, selecciona el kit padre</p>
+            <select
+              value={form.parent_asset_id}
+              onChange={(e) => setForm({ ...form, parent_asset_id: e.target.value })}
+              className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500"
+            >
+              <option value="">Sin kit (activo independiente)</option>
+              {kitOptions.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nombre ? `${a.nombre} — ${a.uid_fisico}` : a.uid_fisico}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Herramienta: próxima mantención */}
-        {!isConsumable && (
+        {!isConsumableForm && (
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-300">
               Próxima mantención <span className="text-gray-500 font-normal">(opcional)</span>
@@ -313,6 +381,27 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
           </div>
         )}
 
+        {/* Prestable: días máx. préstamo */}
+        {!isConsumableForm && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-300">
+              Días máx. préstamo <span className="text-gray-500 font-normal">(opcional)</span>
+            </label>
+            <p className="text-xs text-gray-500">
+              {selectedFamily.dias_max_prestamo
+                ? `Heredado de familia: ${selectedFamily.dias_max_prestamo} días — deja vacío para usar ese valor`
+                : "Sin límite por defecto en la familia — define uno específico para este activo"}
+            </p>
+            <input
+              type="number" min={1}
+              placeholder={selectedFamily.dias_max_prestamo ? String(selectedFamily.dias_max_prestamo) : "Sin límite"}
+              value={form.dias_max_prestamo}
+              onChange={(e) => setForm({ ...form, dias_max_prestamo: e.target.value })}
+              className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+        )}
+
         <button
           type="submit"
           disabled={saving}
@@ -323,7 +412,7 @@ function EditForm({ asset, states, models, brands, onSaved, onBack }: {
       </form>
 
       {/* Ajustar stock — solo consumibles */}
-      {isConsumable && (
+      {isConsumableForm && (
         <div className="bg-gray-800 border border-gray-700 rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2 pb-1 border-b border-gray-700">
             <Package2 size={16} className="text-green-400" />

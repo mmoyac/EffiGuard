@@ -10,6 +10,7 @@ class InventoryLogResponse(BaseModel):
     asset_nombre: str | None = None
     asset_uid: str | None = None
     asset_tipo: str | None = None
+    asset_color: str | None = None
     user_id: int
     user_nombre: str | None = None
     operario_id: int | None = None

@@ -69,6 +69,17 @@ export const assetsApi = {
   update: (id: number, data: object) => api.patch(`/assets/${id}`, data),
   reportLoss: (id: number, data: object) => api.post(`/assets/${id}/loss`, data),
   adjustStock: (id: number, data: object) => api.post(`/assets/${id}/adjust`, data),
+  importTemplate: () => api.get("/assets/import/template", { responseType: "blob" }),
+  importValidate: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post("/assets/import?dry_run=true", form, { headers: { "Content-Type": "multipart/form-data" } });
+  },
+  importConfirm: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post("/assets/import?dry_run=false", form, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 export const loansApi = {

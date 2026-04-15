@@ -9,7 +9,7 @@ interface Props {
 }
 
 export function LossModal({ asset, onConfirm, onClose }: Props) {
-  const isConsumable = asset.tipo === "consumible";
+  const isConsumable = asset.family.comportamiento === "consumible";
   const [cantidad, setCantidad] = useState(1);
   const [observaciones, setObservaciones] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,12 +40,12 @@ export function LossModal({ asset, onConfirm, onClose }: Props) {
         <div className="bg-gray-800 rounded-xl px-4 py-3 text-sm">
           <p className="text-gray-400">Activo</p>
           <p className="font-mono text-white font-semibold">{asset.uid_fisico}</p>
-          <p className="text-xs text-gray-500 mt-0.5 capitalize">{asset.tipo}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{asset.family.nombre}</p>
         </div>
 
         {!isConsumable && (
           <div className="bg-red-900/20 border border-red-800 rounded-xl px-4 py-3 text-sm text-red-300">
-            La herramienta quedará marcada como <strong>Robada / Perdida</strong> y no podrá ser prestada.
+            El activo quedará marcado como <strong>Robado / Perdido</strong> y no podrá ser prestado.
           </div>
         )}
 

@@ -1,5 +1,6 @@
 import { Package, Layers, ArrowLeftRight, RotateCcw, AlertTriangle, User, FolderOpen, SlidersHorizontal } from "lucide-react";
 import type { Asset, Loan } from "../../types";
+import { familyColor } from "../../utils/familyColors";
 
 type ActionType = "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "adjust";
 
@@ -19,7 +20,7 @@ const STATE_LABELS: Record<number, { label: string; color: string }> = {
 
 export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Props) {
   const isKit = kitChildren.length > 0;
-  const isConsumable = asset.tipo === "consumible";
+  const isConsumable = asset.family.comportamiento === "consumible";
   const isAvailable = asset.estado_id === 1;
   const isOnField = asset.estado_id === 2;
   const lowStock = asset.stock_actual <= asset.stock_minimo;
@@ -44,14 +45,16 @@ export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Pr
           <span className="w-2 h-2 rounded-full bg-current" />
           <span className="text-sm font-semibold">{state.label}</span>
           {isKit && <span className="ml-auto text-xs bg-purple-900/50 text-purple-300 px-2 py-0.5 rounded-full border border-purple-800">KIT</span>}
-          {isConsumable && <span className="ml-auto text-xs bg-orange-900/50 text-orange-300 px-2 py-0.5 rounded-full border border-orange-800">CONSUMIBLE</span>}
+          {isConsumable && <span className="ml-auto text-xs bg-orange-900/50 text-orange-300 px-2 py-0.5 rounded-full border border-orange-800">{asset.family.nombre.toUpperCase()}</span>}
         </div>
 
         {/* Info principal */}
         <div className="p-5 space-y-3">
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 bg-gray-700 rounded-xl flex items-center justify-center flex-shrink-0">
-              {isConsumable ? <Layers size={24} className="text-orange-400" /> : <Package size={24} className="text-blue-400" />}
+              {isConsumable
+                ? <Layers size={24} className={familyColor(asset.family.color).icon} />
+                : <Package size={24} className={familyColor(asset.family.color).icon} />}
             </div>
             <div className="flex-1 min-w-0">
               {asset.nombre && (

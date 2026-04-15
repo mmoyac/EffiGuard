@@ -1,5 +1,6 @@
 # Importar todos los modelos para que Alembic los detecte automáticamente
 from app.models.asset import Asset
+from app.models.asset_family import AssetFamily
 from app.models.asset_model import AssetModel
 from app.models.asset_state import AssetState
 from app.models.brand import Brand
@@ -17,6 +18,6 @@ from app.models.user import User
 __all__ = [
     "Tenant", "Role", "User",
     "Module", "MenuItem", "RoleMenuPermission",
-    "Brand", "AssetModel", "AssetState", "Project",
+    "Brand", "AssetModel", "AssetFamily", "AssetState", "Project",
     "Asset", "Loan", "InventoryLog", "Subscription",
 ]

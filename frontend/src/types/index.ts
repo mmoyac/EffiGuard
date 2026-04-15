@@ -28,6 +28,17 @@ export interface MenuItem {
   children: MenuItem[];
 }
 
+export type FamilyColor = "blue" | "orange" | "green" | "purple" | "red" | "yellow" | "pink" | "cyan";
+
+export interface AssetFamily {
+  id: number;
+  tenant_id: number;
+  nombre: string;
+  comportamiento: "prestable" | "consumible";
+  color: FamilyColor;
+  dias_max_prestamo: number | null;
+}
+
 export interface Asset {
   id: number;
   tenant_id: number;
@@ -35,11 +46,13 @@ export interface Asset {
   nombre: string | null;
   parent_asset_id: number | null;
   model_id: number | null;
-  tipo: "herramienta" | "consumible";
+  family_id: number;
+  family: AssetFamily;
   estado_id: number;
   stock_actual: number;
   stock_minimo: number;
   valor_reposicion: number | null;
+  dias_max_prestamo: number | null;
   proxima_mantencion: string | null;
   created_at: string;
   children: Asset[];
@@ -71,6 +84,7 @@ export interface InventoryLog {
   asset_nombre: string | null;
   asset_uid: string | null;
   asset_tipo: string | null;
+  asset_color: string | null;
   user_id: number;
   user_nombre: string | null;
   operario_id: number | null;

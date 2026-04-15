@@ -17,7 +17,7 @@ interface Props {
 }
 
 export function EditAssetModal({ asset, states, models, brands, onSaved, onClose }: Props) {
-  const isConsumable = asset.tipo === "consumible";
+  const isConsumable = asset.family.comportamiento === "consumible";
   const [form, setForm] = useState({
     nombre: asset.nombre ?? "",
     model_id: asset.model_id ? String(asset.model_id) : "",
@@ -97,7 +97,7 @@ export function EditAssetModal({ asset, states, models, brands, onSaved, onClose
           <p className="font-mono text-sm text-white font-semibold">{asset.uid_fisico}</p>
           {asset.nombre && <p className="text-sm text-blue-300 font-medium mt-0.5">{asset.nombre}</p>}
           <p className="text-xs text-gray-500 mt-0.5 capitalize">
-            {brand?.nombre} {model?.nombre ?? "—"} · {asset.tipo}
+            {brand?.nombre} {model?.nombre ?? "—"} · {asset.family.nombre}
           </p>
         </div>
 

@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.asset import Asset
+from app.models.asset_family import AssetFamily
 from app.repositories.base import BaseRepository
 
 
@@ -11,9 +12,13 @@ class AssetRepository(BaseRepository[Asset]):
         super().__init__(Asset, session, tenant_id)
 
     def _base_query(self):
-        # Siempre carga children para evitar MissingGreenlet en serialización async
+        # Carga family, children y sus children (2 niveles) para evitar MissingGreenlet en serialización async
         return (
-            super()._base_query().options(selectinload(Asset.children))
+            super()._base_query().options(
+                selectinload(Asset.family),
+                selectinload(Asset.children).selectinload(Asset.children),
+                selectinload(Asset.children).selectinload(Asset.family),
+            )
         )
 
     async def get_by_uid(self, uid_fisico: str) -> Asset | None:
@@ -31,7 +36,8 @@ class AssetRepository(BaseRepository[Asset]):
     async def list_low_stock(self) -> list[Asset]:
         result = await self.session.execute(
             self._base_query()
-            .where(Asset.tipo == "consumible")
+            .join(AssetFamily, Asset.family_id == AssetFamily.id)
+            .where(AssetFamily.comportamiento == "consumible")
             .where(Asset.stock_actual <= Asset.stock_minimo)
         )
         return list(result.scalars().all())

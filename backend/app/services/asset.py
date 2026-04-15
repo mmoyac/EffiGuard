@@ -28,7 +28,7 @@ async def update_asset(asset_id: int, data: AssetUpdate, session: AsyncSession, 
     asset = await repo.get(asset_id)
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
-    await repo.update(asset, **data.model_dump(exclude_none=True))
+    await repo.update(asset, **data.model_dump(exclude_unset=True))
     return await repo.get_with_children(asset_id)
 
 
@@ -39,7 +39,6 @@ async def scan_asset(uid_fisico: str, session: AsyncSession, tenant_id: int):
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
     if asset.parent_asset_id is None:
-        # Cargar hijos si es kit padre
         return await repo.get_with_children(asset.id)
     return asset
 
@@ -55,12 +54,11 @@ async def withdraw_consumable(data: ConsumableWithdraw, session: AsyncSession, t
     asset = await asset_repo.get(data.asset_id)
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
-    if asset.tipo != "consumible":
+    if asset.family.comportamiento != "consumible":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El activo no es un consumible")
     if asset.stock_actual < data.cantidad:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Stock insuficiente")
 
-    # Validar que el operario exista en el mismo tenant
     operario = await session.get(User, data.operario_id)
     if not operario or operario.tenant_id != tenant_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operario no encontrado")
@@ -82,7 +80,7 @@ async def withdraw_consumable(data: ConsumableWithdraw, session: AsyncSession, t
 
 
 async def report_loss(asset_id: int, data: AssetLoss, session: AsyncSession, tenant_id: int, user_id: int):
-    """Registra pérdida/robo. Herramienta → estado Robado. Consumible → descuenta stock."""
+    """Registra pérdida/robo. Prestable → estado Robado. Consumible → descuenta stock."""
     asset_repo = AssetRepository(session, tenant_id)
     log_repo = InventoryLogRepository(session, tenant_id)
 
@@ -90,7 +88,7 @@ async def report_loss(asset_id: int, data: AssetLoss, session: AsyncSession, ten
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
 
-    if asset.tipo == "herramienta":
+    if asset.family.comportamiento == "prestable":
         await asset_repo.update(asset, estado_id=4)  # 4 = Robado
         cantidad = 1
     else:
@@ -116,7 +114,7 @@ async def adjust_stock(asset_id: int, data: AssetAdjust, session: AsyncSession, 
     asset = await asset_repo.get(asset_id)
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
-    if asset.tipo != "consumible":
+    if asset.family.comportamiento != "consumible":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Solo aplica a consumibles")
 
     diferencia = data.stock_nuevo - asset.stock_actual
@@ -131,7 +129,7 @@ async def adjust_stock(asset_id: int, data: AssetAdjust, session: AsyncSession, 
 
 
 async def create_loan(data: LoanCreate, session: AsyncSession, tenant_id: int, bodeguero_id: int):
-    """Crea préstamo para herramienta o kit completo (padre → todos los hijos)."""
+    """Crea préstamo para activo prestable o kit completo (padre → todos los hijos)."""
     asset_repo = AssetRepository(session, tenant_id)
     loan_repo = LoanRepository(session, tenant_id)
     log_repo = InventoryLogRepository(session, tenant_id)
@@ -139,15 +137,14 @@ async def create_loan(data: LoanCreate, session: AsyncSession, tenant_id: int, b
     asset = await asset_repo.get_with_children(data.asset_id)
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
-    if asset.tipo != "herramienta":
+    if asset.family.comportamiento != "prestable":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Use el endpoint de consumibles para retirar consumibles")
 
-    # Préstamo activo previo
     if await loan_repo.get_active_by_asset(asset.id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El activo ya tiene un préstamo activo")
 
     loans = []
-    assets_to_loan = [asset] + list(asset.children)  # Kit: padre + hijos
+    assets_to_loan = [asset] + list(asset.children)
 
     for a in assets_to_loan:
         loan = await loan_repo.create(
@@ -157,8 +154,7 @@ async def create_loan(data: LoanCreate, session: AsyncSession, tenant_id: int, b
             project_id=data.project_id,
             fecha_devolucion_prevista=data.fecha_devolucion_prevista,
         )
-        # estado_id 2 = En Terreno
-        await asset_repo.update(a, estado_id=2)
+        await asset_repo.update(a, estado_id=2)  # 2 = En Terreno
         await log_repo.create(
             asset_id=a.id,
             user_id=bodeguero_id,

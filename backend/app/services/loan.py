@@ -20,15 +20,29 @@ async def return_loan(loan_id: int, session: AsyncSession, tenant_id: int, user_
     await loan_repo.return_loan(loan)
 
     # estado_id 1 = Disponible
-    asset = await asset_repo.get(loan.asset_id)
+    asset = await asset_repo.get_with_children(loan.asset_id)
     if asset:
         await asset_repo.update(asset, estado_id=1)
+        await log_repo.create(
+            asset_id=asset.id,
+            user_id=user_id,
+            tipo_movimiento="devolucion",
+            cantidad=1,
+            observaciones=observaciones,
+        )
 
-    await log_repo.create(
-        asset_id=loan.asset_id,
-        user_id=user_id,
-        tipo_movimiento="devolucion",
-        cantidad=1,
-        observaciones=observaciones,
-    )
+        # Si es kit padre, devolver también los préstamos activos de todos los hijos
+        for child in asset.children:
+            child_loan = await loan_repo.get_active_by_asset(child.id)
+            if child_loan:
+                await loan_repo.return_loan(child_loan)
+                await asset_repo.update(child, estado_id=1)
+                await log_repo.create(
+                    asset_id=child.id,
+                    user_id=user_id,
+                    tipo_movimiento="devolucion",
+                    cantidad=1,
+                    observaciones=observaciones,
+                )
+
     return loan

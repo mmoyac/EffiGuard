@@ -122,7 +122,7 @@ export function Scanner() {
     if (!scannedAsset) return;
     await assetsApi.reportLoss(scannedAsset.id, { cantidad, observaciones: observaciones || undefined });
     setModal(null);
-    const msg = scannedAsset.tipo === "herramienta"
+    const msg = scannedAsset.family?.comportamiento === "prestable"
       ? "Herramienta marcada como perdida/robada"
       : `${cantidad} unidades registradas como pérdida`;
     showFeedback("success", msg);

@@ -4,6 +4,7 @@ from sqlalchemy.orm import aliased
 
 from app.core.dependencies import CurrentToken, DBSession
 from app.models.asset import Asset
+from app.models.asset_family import AssetFamily
 from app.models.inventory_log import InventoryLog
 from app.models.user import User
 from app.schemas.inventory import InventoryLogResponse
@@ -22,11 +23,13 @@ def _log_query(tenant_id: int):
             Operario.nombre.label("operario_nombre"),
             Asset.nombre.label("asset_nombre"),
             Asset.uid_fisico.label("asset_uid"),
-            Asset.tipo.label("asset_tipo"),
+            AssetFamily.comportamiento.label("asset_tipo"),
+            AssetFamily.color.label("asset_color"),
         )
         .join(User, InventoryLog.user_id == User.id)
         .outerjoin(Operario, InventoryLog.operario_id == Operario.id)
         .join(Asset, InventoryLog.asset_id == Asset.id)
+        .join(AssetFamily, Asset.family_id == AssetFamily.id)
         .where(InventoryLog.tenant_id == tenant_id)
         .order_by(InventoryLog.fecha_hora.desc())
     )
@@ -41,6 +44,7 @@ def _to_response(row) -> InventoryLogResponse:
         asset_nombre=row.asset_nombre,
         asset_uid=row.asset_uid,
         asset_tipo=row.asset_tipo,
+        asset_color=row.asset_color,
     )
 
 

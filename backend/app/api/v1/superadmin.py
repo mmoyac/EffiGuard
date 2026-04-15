@@ -14,6 +14,7 @@ from app.core.dependencies import DBSession
 from app.core.security import hash_password
 from app.core.superadmin import SuperAdminToken, ActingTenantId
 
+from app.models.asset_family import AssetFamily
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.role import Role
@@ -166,6 +167,13 @@ async def create_tenant(data: TenantCreate, token: SuperAdminToken, session: DBS
         plan_type=data.plan_type,
     )
     session.add(tenant)
+    await session.flush()
+    await session.refresh(tenant)
+
+    # Familias por defecto
+    session.add(AssetFamily(tenant_id=tenant.id, nombre="Herramienta", comportamiento="prestable", color="blue"))
+    session.add(AssetFamily(tenant_id=tenant.id, nombre="Consumible", comportamiento="consumible", color="orange"))
+
     await session.commit()
     await session.refresh(tenant)
     return tenant

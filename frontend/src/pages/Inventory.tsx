@@ -13,6 +13,7 @@ import {
   ShoppingCart,
   SlidersHorizontal,
 } from "lucide-react";
+import { familyColor } from "../utils/familyColors";
 import { api } from "../services/api";
 import type { InventoryLog } from "../types";
 
@@ -186,17 +187,13 @@ function LogCard({ log }: { log: InventoryLog }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             {log.asset_tipo === "consumible" ? (
-              <Package size={13} className="flex-shrink-0 text-orange-400" />
+              <Package size={13} className={`flex-shrink-0 ${familyColor(log.asset_color ?? "blue").icon}`} />
             ) : (
-              <Wrench size={13} className="flex-shrink-0 text-blue-400" />
+              <Wrench size={13} className={`flex-shrink-0 ${familyColor(log.asset_color ?? "blue").icon}`} />
             )}
             <p className="text-sm text-white font-medium truncate">{assetLabel}</p>
-            <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border hidden sm:block ${
-              log.asset_tipo === "consumible"
-                ? "text-orange-400 bg-orange-900/30 border-orange-800"
-                : "text-blue-400 bg-blue-900/30 border-blue-800"
-            }`}>
-              {log.asset_tipo === "consumible" ? "Consumible" : "Herramienta"}
+            <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border hidden sm:block ${familyColor(log.asset_color ?? "blue").badge}`}>
+              {log.asset_tipo === "consumible" ? "Consumible" : "Prestable"}
             </span>
           </div>
           <p className="text-xs text-gray-500 truncate">
