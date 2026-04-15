@@ -11,6 +11,7 @@ class LoanCreate(BaseModel):
 
 
 class LoanReturn(BaseModel):
+    returning_user_id: int        # Operario que devuelve — debe coincidir con quien retiró
     observaciones: str | None = None
 
 

@@ -6,6 +6,7 @@ import { LoanModal } from "../components/scanner/LoanModal";
 import { ConsumableModal } from "../components/scanner/ConsumableModal";
 import { CameraScanner } from "../components/scanner/CameraScanner";
 import { NFCScanner } from "../components/scanner/NFCScanner";
+import { ReturnModal } from "../components/scanner/ReturnModal";
 import { LossModal } from "../components/scanner/LossModal";
 import { AdjustModal } from "../components/scanner/AdjustModal";
 import { assetsApi, loansApi } from "../services/api";
@@ -96,9 +97,9 @@ export function Scanner() {
     resetScan();
   }
 
-  async function handleReturnConfirm() {
+  async function handleReturnConfirm(returningUserId: number, observaciones: string) {
     if (!activeLoan) return;
-    await loansApi.return(activeLoan.id);
+    await loansApi.return(activeLoan.id, returningUserId, observaciones || undefined);
     setModal(null);
     showFeedback("success", "Devolución registrada correctamente");
     resetScan();
@@ -139,10 +140,6 @@ export function Scanner() {
 
   function handleAction(type: "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "adjust") {
     if (type === "unavailable") return;
-    if (type === "return") {
-      handleReturnConfirm();
-      return;
-    }
     setModal(type);
   }
 
@@ -264,6 +261,13 @@ export function Scanner() {
       </div>
 
       {/* Modales */}
+      {modal === "return" && activeLoan && (
+        <ReturnModal
+          activeLoan={activeLoan}
+          onConfirm={handleReturnConfirm}
+          onClose={() => setModal(null)}
+        />
+      )}
       {(modal === "loan" || modal === "kit") && scannedAsset && (
         <LoanModal
           asset={scannedAsset}

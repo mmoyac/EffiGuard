@@ -6,7 +6,7 @@ from app.repositories.inventory_log import InventoryLogRepository
 from app.repositories.loan import LoanRepository
 
 
-async def return_loan(loan_id: int, session: AsyncSession, tenant_id: int, user_id: int, observaciones: str | None = None):
+async def return_loan(loan_id: int, session: AsyncSession, tenant_id: int, user_id: int, returning_user_id: int, observaciones: str | None = None):
     loan_repo = LoanRepository(session, tenant_id)
     asset_repo = AssetRepository(session, tenant_id)
     log_repo = InventoryLogRepository(session, tenant_id)
@@ -16,6 +16,8 @@ async def return_loan(loan_id: int, session: AsyncSession, tenant_id: int, user_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Préstamo no encontrado")
     if loan.fecha_devolucion_real is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El préstamo ya fue devuelto")
+    if loan.user_id != returning_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="El operario no coincide con quien retiró la herramienta")
 
     await loan_repo.return_loan(loan)
 

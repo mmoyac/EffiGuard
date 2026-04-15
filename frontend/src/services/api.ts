@@ -85,7 +85,7 @@ export const assetsApi = {
 export const loansApi = {
   list: (activeOnly = false) => api.get(`/loans?active_only=${activeOnly}`),
   create: (data: object) => api.post("/loans", data),
-  return: (id: number, obs?: string) => api.post(`/loans/${id}/return`, { observaciones: obs }),
+  return: (id: number, returningUserId: number, obs?: string) => api.post(`/loans/${id}/return`, { returning_user_id: returningUserId, observaciones: obs }),
   withdrawConsumable: (data: object) => api.post("/loans/consumables/withdraw", data),
   activeByAsset: (assetId: number) => api.get(`/loans/active/asset/${assetId}`),
 };
