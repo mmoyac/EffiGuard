@@ -1,6 +1,6 @@
 from fastapi import APIRouter, status
 
-from app.core.dependencies import CurrentToken, DBSession
+from app.core.dependencies import ApiKeyTenant, CurrentToken, DBSession
 from app.repositories.asset import AssetRepository
 from app.schemas.asset import AssetAdjust, AssetCreate, AssetLoss, AssetPurchase, AssetRepairDone, AssetShrinkage, AssetResponse, AssetUpdate, AssetQueryResult
 from app.schemas.inventory import InventoryLogResponse
@@ -21,8 +21,8 @@ async def create_asset(data: AssetCreate, token: CurrentToken, session: DBSessio
 
 
 @router.get("/query", response_model=list[AssetQueryResult])
-async def query_assets(q: str, token: CurrentToken, session: DBSession):
-    """Consulta disponibilidad por nombre. Para agentes n8n/IA.
+async def query_assets(q: str, tenant_id: ApiKeyTenant, session: DBSession):
+    """Consulta disponibilidad por nombre. Autenticación via X-API-Key (para n8n/agentes).
     Ej: ?q=taladro → herramientas disponibles/en terreno.
     Ej: ?q=tornillo → stock actual de consumibles."""
     from sqlalchemy import select
@@ -35,46 +35,22 @@ async def query_assets(q: str, token: CurrentToken, session: DBSession):
         .join(AssetFamily, Asset.family_id == AssetFamily.id)
         .join(AssetState, Asset.estado_id == AssetState.id)
         .where(
-            Asset.tenant_id == token.tenant_id,
+            Asset.tenant_id == tenant_id,
             Asset.nombre.ilike(f"%{q}%"),
             Asset.parent_asset_id.is_(None),
         )
     )
     rows = (await session.execute(stmt)).all()
 
-    groups: dict[str, dict] = {}
-    for asset, comportamiento, estado_nombre in rows:
-        key = f"{asset.nombre}_{asset.family_id}"
-        if key not in groups:
-            groups[key] = {
-                "nombre": asset.nombre,
-                "tipo": comportamiento,
-                "disponibles": 0, "en_terreno": 0, "en_reparacion": 0, "total": 0,
-                "stock_actual": asset.stock_actual,
-                "stock_minimo": asset.stock_minimo,
-            }
-        if comportamiento == "prestable":
-            groups[key]["total"] += 1
-            e = estado_nombre.lower()
-            if "disponible" in e:
-                groups[key]["disponibles"] += 1
-            elif "terreno" in e:
-                groups[key]["en_terreno"] += 1
-            elif "reparaci" in e:
-                groups[key]["en_reparacion"] += 1
-
     return [
+        AssetQueryResult(nombre=asset.nombre, tipo=comportamiento, estado=estado_nombre)
+        if comportamiento == "prestable" else
         AssetQueryResult(
-            nombre=g["nombre"], tipo=g["tipo"],
-            disponibles=g["disponibles"], en_terreno=g["en_terreno"],
-            en_reparacion=g["en_reparacion"], total=g["total"],
-        ) if g["tipo"] == "prestable" else
-        AssetQueryResult(
-            nombre=g["nombre"], tipo=g["tipo"],
-            stock_actual=g["stock_actual"], stock_minimo=g["stock_minimo"],
-            bajo_stock=g["stock_actual"] <= g["stock_minimo"],
+            nombre=asset.nombre, tipo=comportamiento,
+            stock_actual=asset.stock_actual, stock_minimo=asset.stock_minimo,
+            bajo_stock=asset.stock_actual <= asset.stock_minimo,
         )
-        for g in groups.values()
+        for asset, comportamiento, estado_nombre in rows
     ]
 
 

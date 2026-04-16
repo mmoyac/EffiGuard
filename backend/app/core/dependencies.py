@@ -50,6 +50,24 @@ async def get_current_token(
     )
 
 
+async def get_api_key_tenant(
+    x_api_key: Annotated[Optional[str], Header()] = None,
+    session: AsyncSession = Depends(get_session),
+) -> int:
+    if not x_api_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="X-API-Key requerido")
+    from sqlalchemy import select
+    from app.models.api_key import ApiKey
+    result = await session.execute(
+        select(ApiKey).where(ApiKey.key == x_api_key, ApiKey.is_active == True)
+    )
+    api_key = result.scalar_one_or_none()
+    if not api_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key inválida o revocada")
+    return api_key.tenant_id
+
+
 # Dependencias reutilizables
 CurrentToken = Annotated[TokenPayload, Depends(get_current_token)]
 DBSession = Annotated[AsyncSession, Depends(get_session)]
+ApiKeyTenant = Annotated[int, Depends(get_api_key_tenant)]

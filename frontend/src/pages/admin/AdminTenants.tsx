@@ -1,7 +1,114 @@
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "react-query";
-import { Building2, Plus, ChevronDown, ChevronUp, ImagePlus } from "lucide-react";
+import { Building2, Plus, ChevronDown, ChevronUp, ImagePlus, Key, Copy, Trash2, Check } from "lucide-react";
 import { adminApi, getMediaUrl } from "../../services/api";
+
+interface ApiKeyItem {
+  id: number;
+  description: string;
+  key?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+function TenantApiKeys({ tenantId }: { tenantId: number }) {
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [description, setDescription] = useState("");
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const { data: keys = [] } = useQuery<ApiKeyItem[]>(
+    ["api-keys", tenantId],
+    () => adminApi.listApiKeys(tenantId).then((r) => r.data),
+  );
+
+  const createMutation = useMutation(
+    () => adminApi.createApiKey(tenantId, description),
+    {
+      onSuccess: (r) => {
+        qc.invalidateQueries(["api-keys", tenantId]);
+        setNewKey(r.data.key);
+        setDescription("");
+        setShowForm(false);
+      },
+    },
+  );
+
+  const revokeMutation = useMutation(
+    (keyId: number) => adminApi.revokeApiKey(tenantId, keyId),
+    { onSuccess: () => qc.invalidateQueries(["api-keys", tenantId]) },
+  );
+
+  function copyKey(k: string) {
+    navigator.clipboard.writeText(k);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="border-t border-gray-700 px-4 py-3 space-y-3">
+      <div className="flex items-center gap-2">
+        <Key size={14} className="text-yellow-400" />
+        <span className="text-xs font-semibold text-gray-300">API Keys</span>
+        <button
+          onClick={() => { setShowForm((v) => !v); setNewKey(null); }}
+          className="ml-auto flex items-center gap-1.5 text-xs bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 border border-yellow-700/50 px-2.5 py-1 rounded-lg transition-colors"
+        >
+          <Plus size={12} /> Nueva key
+        </button>
+      </div>
+
+      {newKey && (
+        <div className="bg-green-900/20 border border-green-700/50 rounded-xl px-3 py-2.5 space-y-1.5">
+          <p className="text-xs text-green-400 font-semibold">Key generada — cópiala ahora, no se volverá a mostrar</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs text-green-300 bg-gray-900 px-2 py-1.5 rounded-lg font-mono break-all">{newKey}</code>
+            <button onClick={() => copyKey(newKey)} className="flex-shrink-0 text-gray-400 hover:text-white transition-colors">
+              {copied ? <Check size={15} className="text-green-400" /> : <Copy size={15} />}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showForm && (
+        <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }}
+          className="flex gap-2">
+          <input
+            autoFocus required placeholder="Descripción (ej: n8n producción)"
+            value={description} onChange={(e) => setDescription(e.target.value)}
+            className="flex-1 bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500"
+          />
+          <button type="submit" disabled={createMutation.isLoading}
+            className="text-xs bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 text-white font-semibold px-3 py-2 rounded-xl transition-colors">
+            Generar
+          </button>
+        </form>
+      )}
+
+      {keys.length === 0 && !showForm && (
+        <p className="text-xs text-gray-500">Sin API keys.</p>
+      )}
+
+      <div className="space-y-1.5">
+        {keys.map((k) => (
+          <div key={k.id} className={`flex items-center gap-2 text-xs px-2.5 py-2 rounded-lg bg-gray-700/40 ${!k.is_active ? "opacity-40" : ""}`}>
+            <Key size={12} className={k.is_active ? "text-yellow-400" : "text-gray-500"} />
+            <span className="flex-1 text-gray-300 truncate">{k.description}</span>
+            <span className="text-gray-500 flex-shrink-0">{k.created_at.slice(0, 10)}</span>
+            {k.is_active && (
+              <button onClick={() => revokeMutation.mutate(k.id)}
+                className="flex-shrink-0 text-gray-500 hover:text-red-400 transition-colors" title="Revocar">
+                <Trash2 size={13} />
+              </button>
+            )}
+            {!k.is_active && <span className="text-gray-600 flex-shrink-0">Revocada</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface Tenant {
   id: number;
@@ -199,18 +306,21 @@ export function AdminTenants() {
             </div>
 
             {expanded === t.id && summary[t.id] && (
-              <div className="border-t border-gray-700 px-4 py-3 grid grid-cols-3 gap-2">
-                {[
-                  { label: "Usuarios", val: summary[t.id].usuarios },
-                  { label: "Activos", val: summary[t.id].activos },
-                  { label: "Préstamos activos", val: summary[t.id].prestamos_activos },
-                ].map(({ label, val }) => (
-                  <div key={label} className="bg-gray-700/50 rounded-xl px-3 py-2 text-center">
-                    <p className="text-lg font-bold text-white">{val}</p>
-                    <p className="text-xs text-gray-400">{label}</p>
-                  </div>
-                ))}
-              </div>
+              <>
+                <div className="border-t border-gray-700 px-4 py-3 grid grid-cols-3 gap-2">
+                  {[
+                    { label: "Usuarios", val: summary[t.id].usuarios },
+                    { label: "Activos", val: summary[t.id].activos },
+                    { label: "Préstamos activos", val: summary[t.id].prestamos_activos },
+                  ].map(({ label, val }) => (
+                    <div key={label} className="bg-gray-700/50 rounded-xl px-3 py-2 text-center">
+                      <p className="text-lg font-bold text-white">{val}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                <TenantApiKeys tenantId={t.id} />
+              </>
             )}
           </div>
         ))}

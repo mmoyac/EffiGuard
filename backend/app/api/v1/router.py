@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import asset_families, assets, auth, catalog, dashboard, import_assets, inventory, loans, menu, projects, pwa, superadmin, users
+from app.api.v1 import api_keys, asset_families, assets, auth, catalog, dashboard, import_assets, inventory, loans, menu, projects, pwa, superadmin, users
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -15,5 +15,6 @@ api_router.include_router(inventory.router)
 api_router.include_router(menu.router)
 api_router.include_router(projects.router)
 api_router.include_router(catalog.router)
+api_router.include_router(api_keys.router)
 api_router.include_router(superadmin.router)
 api_router.include_router(pwa.router)

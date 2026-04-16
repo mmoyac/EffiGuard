@@ -138,6 +138,13 @@ export const adminApi = {
   listPermissions: (roleId?: number) => api.get(`/admin/permissions${roleId ? `?role_id=${roleId}` : ""}`),
   setPermissions: (roleId: number, menuItemIds: number[]) =>
     api.put("/admin/permissions", { role_id: roleId, menu_item_ids: menuItemIds }),
+  // API Keys
+  listApiKeys: (tenantId: number) =>
+    api.get("/api-keys", { headers: { "X-Acting-Tenant": String(tenantId) } }),
+  createApiKey: (tenantId: number, description: string) =>
+    api.post("/api-keys", { description }, { headers: { "X-Acting-Tenant": String(tenantId) } }),
+  revokeApiKey: (tenantId: number, keyId: number) =>
+    api.delete(`/api-keys/${keyId}`, { headers: { "X-Acting-Tenant": String(tenantId) } }),
   // Logo de tenant
   uploadTenantLogo: (tenantId: number, file: File) => {
     const form = new FormData();

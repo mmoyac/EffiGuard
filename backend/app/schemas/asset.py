@@ -62,10 +62,7 @@ class AssetQueryResult(BaseModel):
     nombre: str | None
     tipo: str                   # prestable | consumible
     # prestable
-    disponibles: int = 0
-    en_terreno: int = 0
-    en_reparacion: int = 0
-    total: int = 0
+    estado: str = ""
     # consumible
     stock_actual: int = 0
     stock_minimo: int = 0
