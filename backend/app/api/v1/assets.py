@@ -38,6 +38,7 @@ async def query_assets(q: str, tenant_id: ApiKeyTenant, session: DBSession):
             AssetFamily.comportamiento,
             AssetState.nombre.label("estado_nombre"),
             User.nombre.label("operario_nombre"),
+            Loan.fecha_entrega.label("fecha_prestamo"),
         )
         .join(AssetFamily, Asset.family_id == AssetFamily.id)
         .join(AssetState, Asset.estado_id == AssetState.id)
@@ -58,6 +59,7 @@ async def query_assets(q: str, tenant_id: ApiKeyTenant, session: DBSession):
         AssetQueryResult(
             nombre=asset.nombre, tipo=comportamiento,
             estado=estado_nombre, operario=operario_nombre,
+            fecha_prestamo=fecha_prestamo.strftime("%d/%m/%Y %H:%M") if fecha_prestamo else None,
         )
         if comportamiento == "prestable" else
         AssetQueryResult(
@@ -65,7 +67,7 @@ async def query_assets(q: str, tenant_id: ApiKeyTenant, session: DBSession):
             stock_actual=asset.stock_actual, stock_minimo=asset.stock_minimo,
             bajo_stock=asset.stock_actual <= asset.stock_minimo,
         )
-        for asset, comportamiento, estado_nombre, operario_nombre in rows
+        for asset, comportamiento, estado_nombre, operario_nombre, fecha_prestamo in rows
     ]
 
 
