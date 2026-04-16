@@ -58,6 +58,20 @@ class AssetResponse(BaseModel):
 AssetResponse.model_rebuild()
 
 
+class AssetQueryResult(BaseModel):
+    nombre: str | None
+    tipo: str                   # prestable | consumible
+    # prestable
+    disponibles: int = 0
+    en_terreno: int = 0
+    en_reparacion: int = 0
+    total: int = 0
+    # consumible
+    stock_actual: int = 0
+    stock_minimo: int = 0
+    bajo_stock: bool = False
+
+
 class ConsumableWithdraw(BaseModel):
     asset_id: int
     cantidad: int
