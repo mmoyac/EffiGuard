@@ -29,11 +29,23 @@ async def query_assets(q: str, tenant_id: ApiKeyTenant, session: DBSession):
     from app.models.asset import Asset
     from app.models.asset_family import AssetFamily
     from app.models.asset_state import AssetState
+    from app.models.loan import Loan
+    from app.models.user import User
 
     stmt = (
-        select(Asset, AssetFamily.comportamiento, AssetState.nombre.label("estado_nombre"))
+        select(
+            Asset,
+            AssetFamily.comportamiento,
+            AssetState.nombre.label("estado_nombre"),
+            User.nombre.label("operario_nombre"),
+        )
         .join(AssetFamily, Asset.family_id == AssetFamily.id)
         .join(AssetState, Asset.estado_id == AssetState.id)
+        .outerjoin(
+            Loan,
+            (Loan.asset_id == Asset.id) & Loan.fecha_devolucion_real.is_(None),
+        )
+        .outerjoin(User, User.id == Loan.user_id)
         .where(
             Asset.tenant_id == tenant_id,
             Asset.nombre.ilike(f"%{q}%"),
@@ -43,14 +55,17 @@ async def query_assets(q: str, tenant_id: ApiKeyTenant, session: DBSession):
     rows = (await session.execute(stmt)).all()
 
     return [
-        AssetQueryResult(nombre=asset.nombre, tipo=comportamiento, estado=estado_nombre)
+        AssetQueryResult(
+            nombre=asset.nombre, tipo=comportamiento,
+            estado=estado_nombre, operario=operario_nombre,
+        )
         if comportamiento == "prestable" else
         AssetQueryResult(
             nombre=asset.nombre, tipo=comportamiento,
             stock_actual=asset.stock_actual, stock_minimo=asset.stock_minimo,
             bajo_stock=asset.stock_actual <= asset.stock_minimo,
         )
-        for asset, comportamiento, estado_nombre in rows
+        for asset, comportamiento, estado_nombre, operario_nombre in rows
     ]
 
 

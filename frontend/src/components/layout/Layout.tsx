@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { ChatWidget } from "../ChatWidget";
 
 export function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -33,6 +34,7 @@ export function Layout() {
           <Outlet />
         </main>
       </div>
+      <ChatWidget />
     </div>
   );
 }

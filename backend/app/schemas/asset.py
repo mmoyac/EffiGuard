@@ -63,6 +63,7 @@ class AssetQueryResult(BaseModel):
     tipo: str                   # prestable | consumible
     # prestable
     estado: str = ""
+    operario: str | None = None  # nombre del operario si está prestada
     # consumible
     stock_actual: int = 0
     stock_minimo: int = 0
