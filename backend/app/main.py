@@ -14,8 +14,8 @@ app = FastAPI(
     title="EffiGuard API",
     description="SaaS de gestión de activos, control de bodega y prevención de robos.",
     version="1.0.0",
-    docs_url="/docs" if not settings.is_production else None,
-    redoc_url="/redoc" if not settings.is_production else None,
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 import re
