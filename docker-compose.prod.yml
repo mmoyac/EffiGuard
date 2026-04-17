@@ -78,14 +78,23 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
       PGPASSWORD: ${POSTGRES_PASSWORD}
+      B2_KEY_ID: ${B2_KEY_ID}
+      B2_APPLICATION_KEY: ${B2_APPLICATION_KEY}
+      B2_BUCKET_NAME: ${B2_BUCKET_NAME}
     volumes:
       - ./backups:/backups
     networks:
       - internal
-    # Cron: diario a las 2am, retención 7 días
+    # Cron: diario a las 2am, retención 7 días + upload a Backblaze B2
     entrypoint: >
       /bin/sh -c '
-        echo "Backup service iniciado"
+        echo "Instalando rclone..."
+        apk add --no-cache rclone > /dev/null 2>&1
+
+        mkdir -p /root/.config/rclone
+        printf "[b2]\ntype = b2\naccount = $$B2_KEY_ID\nkey = $$B2_APPLICATION_KEY\n" > /root/.config/rclone/rclone.conf
+
+        echo "Backup service iniciado (local + Backblaze B2)"
         while true; do
           NOW_SECS=$$(( $$(date +%H) * 3600 + $$(date +%M) * 60 + $$(date +%S) ))
           TARGET_SECS=7200
@@ -102,12 +111,19 @@ services:
           pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > $$FILENAME
 
           if [ $$? -eq 0 ]; then
-            echo "Backup completado: $$FILENAME"
+            echo "Backup local completado: $$FILENAME"
+            echo "Subiendo a Backblaze B2..."
+            rclone copy $$FILENAME b2:$$B2_BUCKET_NAME/effiguard/ --log-level INFO
+            if [ $$? -eq 0 ]; then
+              echo "Upload B2 completado"
+            else
+              echo "ERROR: Upload B2 fallido (backup local conservado)"
+            fi
           else
             echo "ERROR: Backup fallido"
           fi
 
-          echo "Eliminando backups con mas de 7 dias..."
+          echo "Eliminando backups locales con mas de 7 dias..."
           find /backups -name "effiguard_*.sql.gz" -mtime +7 -delete
           echo "Limpieza completada"
         done
@@ -115,6 +131,8 @@ services:
     deploy:
       resources:
         limits:
+          memory: 128M
+        reservations:
           memory: 64M
 
 volumes:

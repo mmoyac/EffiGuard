@@ -100,6 +100,15 @@ jobs:
 
             cd /root/docker/EffiGuard
 
+            # Inyectar credenciales B2 en .env
+            grep -q "B2_KEY_ID" .env || echo "" >> .env
+            sed -i '/^B2_KEY_ID=/d' .env
+            sed -i '/^B2_APPLICATION_KEY=/d' .env
+            sed -i '/^B2_BUCKET_NAME=/d' .env
+            echo "B2_KEY_ID=${{ secrets.B2_KEY_ID }}" >> .env
+            echo "B2_APPLICATION_KEY=${{ secrets.B2_APPLICATION_KEY }}" >> .env
+            echo "B2_BUCKET_NAME=${{ secrets.B2_BUCKET_NAME }}" >> .env
+
             # Permisos correctos para scripts
             chmod +x scripts/add-tenant.sh
 
