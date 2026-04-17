@@ -110,7 +110,7 @@ jobs:
             docker compose pull backend frontend
 
             echo "Reiniciando servicios actualizados..."
-            docker compose up -d --force-recreate backend frontend
+            docker compose up -d --force-recreate backend frontend backup
 
             echo "Esperando que el backend levante y ejecute migraciones..."
             sleep 15
