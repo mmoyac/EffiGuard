@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ENVIRONMENT: str = "development"
-    BASE_DOMAIN: str = "lexastech.cl"
+    BASE_DOMAIN: str = "effi4tech.cl"
 
     @property
     def is_production(self) -> bool:

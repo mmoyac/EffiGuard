@@ -2,14 +2,14 @@
 
 ## Requisitos previos
 - Acceso SSH al VPS (`168.231.96.205`)
-- Acceso a Cloudflare (DNS de `lexastech.cl`)
+- Acceso a Cloudflare (DNS de `effi4tech.cl`)
 - El deploy de EffiGuard debe estar corriendo en el VPS
 
 ---
 
 ## Paso 1 — Crear registro DNS en Cloudflare
 
-1. Ir a **Cloudflare → lexastech.cl → DNS → Add record**
+1. Ir a **Cloudflare → effi4tech.cl → DNS → Add record**
 2. Completar:
 
 | Campo | Valor |
@@ -39,7 +39,7 @@ Ejemplo:
 sh /root/docker/EffiGuard/scripts/add-tenant.sh propublix
 ```
 
-Esto crea la configuración nginx para `effiguard-propublix.lexastech.cl` y recarga nginx automáticamente. El subdominio queda operativo con HTTPS (wildcard cert `*.lexastech.cl`).
+Esto crea la configuración nginx para `effiguard-propublix.effi4tech.cl` y recarga nginx automáticamente. El subdominio queda operativo con HTTPS (wildcard cert `*.effi4tech.cl`).
 
 ---
 
@@ -101,7 +101,7 @@ VALUES (
 
 Abrir en el navegador:
 ```
-https://effiguard-{slug}.lexastech.cl
+https://effiguard-{slug}.effi4tech.cl
 ```
 
 Ingresar con el email y password creados en el paso 4.
@@ -115,5 +115,5 @@ Ingresar con el email y password creados en el paso 4.
 2. VPS → sh /root/docker/EffiGuard/scripts/add-tenant.sh {slug}
 3. DB  → INSERT INTO tenants (...)
 4. DB  → INSERT INTO users (...)
-5. Verificar en https://effiguard-{slug}.lexastech.cl
+5. Verificar en https://effiguard-{slug}.effi4tech.cl
 ```

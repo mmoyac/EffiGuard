@@ -15,7 +15,7 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse
 
-# effiguard-{slug}.lexastech.cl  →  grupo 1 = slug
+# effiguard-{slug}.effi4tech.cl  →  grupo 1 = slug
 _SLUG_RE = re.compile(rf"^effiguard-([^.]+)\.{re.escape(settings.BASE_DOMAIN)}(?::\d+)?$")
 
 

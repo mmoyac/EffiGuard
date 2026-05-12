@@ -6,12 +6,12 @@
 #   1. Crea el archivo de configuración nginx para ese tenant
 #   2. Recarga nginx
 #
-# El cert wildcard *.lexastech.cl ya cubre todos los subdominios — no hay que generar nada.
+# El cert wildcard *.effi4tech.cl ya cubre todos los subdominios — no hay que generar nada.
 
 set -e
 
 SLUG=$1
-DOMAIN="effiguard-${SLUG}.lexastech.cl"
+DOMAIN="effiguard-${SLUG}.effi4tech.cl"
 NGINX_PROXY_DIR="/root/docker/nginx-proxy"
 CONF_FILE="${NGINX_PROXY_DIR}/conf.d/effiguard-${SLUG}.conf"
 TEMPLATE="/root/docker/EffiGuard/nginx-effiguard.conf"

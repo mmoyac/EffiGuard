@@ -39,7 +39,9 @@ export function Loans() {
 function LoanCard({ loan }: { loan: Loan }) {
   const entrega = new Date(loan.fecha_entrega);
   const ahora = new Date();
-  const dias = Math.floor((ahora.getTime() - entrega.getTime()) / (1000 * 60 * 60 * 24));
+  const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+  const entregaDia = new Date(entrega.getFullYear(), entrega.getMonth(), entrega.getDate());
+  const dias = Math.floor((hoy.getTime() - entregaDia.getTime()) / (1000 * 60 * 60 * 24));
   const vencida = loan.fecha_devolucion_prevista && new Date(loan.fecha_devolucion_prevista) < ahora;
 
   return (
