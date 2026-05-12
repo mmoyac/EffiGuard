@@ -39,7 +39,7 @@ Ejemplo:
 sh /root/docker/EffiGuard/scripts/add-tenant.sh propublix
 ```
 
-Esto crea la configuración nginx para `effiguard-propublix.effi4tech.cl` y recarga nginx automáticamente. El subdominio queda operativo con HTTPS (wildcard cert `*.effi4tech.cl`).
+Esto crea la configuración nginx para `effiguard-propublix.effi4tech.cl` y recarga nginx automáticamente. El subdominio queda operativo con HTTPS (wildcard cert `*.effi4tech.cl`, almacenado en `effi4tech.cl-0001`).
 
 ---
 
