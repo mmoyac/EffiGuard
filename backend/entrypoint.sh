@@ -10,4 +10,4 @@ echo "PostgreSQL listo. Ejecutando migraciones..."
 alembic upgrade head
 
 echo "Migraciones completadas. Iniciando aplicacion..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2

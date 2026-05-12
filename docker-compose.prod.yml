@@ -21,12 +21,18 @@ services:
       retries: 5
     networks:
       - internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
-          memory: 512M
-        reservations:
           memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 64M
 
   backend:
     image: mmoyac/effiguard-backend:latest
@@ -41,14 +47,21 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
       ENVIRONMENT: production
+      BASE_DOMAIN: effi4tech.cl
     networks:
       - internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 384M
+          cpus: '1.0'
         reservations:
-          memory: 128M
+          memory: 192M
 
   frontend:
     image: mmoyac/effiguard-frontend:latest
@@ -59,12 +72,18 @@ services:
     networks:
       - internal
       - general-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
     deploy:
       resources:
         limits:
-          memory: 128M
-        reservations:
           memory: 64M
+          cpus: '0.25'
+        reservations:
+          memory: 16M
 
   backup:
     image: postgres:16-alpine
@@ -85,11 +104,15 @@ services:
       - ./backups:/backups
     networks:
       - internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
     # Cron: diario a las 2am, retención 7 días + upload a Backblaze B2
     entrypoint: >
       /bin/sh -c '
-        echo "Instalando rclone..."
-        apk add --no-cache rclone > /dev/null 2>&1
+        command -v rclone > /dev/null 2>&1 || apk add --no-cache rclone > /dev/null 2>&1
 
         mkdir -p /root/.config/rclone
         printf "[b2]\ntype = b2\naccount = $$B2_KEY_ID\nkey = $$B2_APPLICATION_KEY\n" > /root/.config/rclone/rclone.conf
@@ -131,9 +154,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128M
-        reservations:
           memory: 64M
+          cpus: '0.25'
+        reservations:
+          memory: 16M
 
 volumes:
   postgres_data:
