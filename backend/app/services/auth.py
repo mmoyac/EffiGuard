@@ -41,21 +41,24 @@ async def login(request: LoginRequest, session: AsyncSession, host: str = "") ->
     slug = _extract_slug(host)
 
     if slug:
-        # Prod: resolver tenant por subdominio y filtrar usuario dentro del tenant
+        # Prod: buscar primero en el tenant del subdominio
         tenant = await _resolve_tenant(slug, session)
         result = await session.execute(
-            select(User).where(
-                User.email == request.email,
-                User.tenant_id == tenant.id,
-            )
+            select(User).where(User.email == request.email, User.tenant_id == tenant.id)
         )
+        user = result.scalar_one_or_none()
+        # Fallback: super admin puede entrar desde cualquier subdominio
+        if not user:
+            result = await session.execute(
+                select(User).where(User.email == request.email, User.role_id == 1)
+            )
+            user = result.scalar_one_or_none()
     else:
         # Dev/local: búsqueda global por email (sin filtro tenant)
         result = await session.execute(
             select(User).where(User.email == request.email)
         )
-
-    user = result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
 
     # Usuario no existe o contraseña incorrecta — mismo mensaje para no revelar info
     if not user or not verify_password(request.password, user.password_hash):
@@ -106,10 +109,17 @@ async def google_login(id_token_str: str, session: AsyncSession, host: str = "")
         result = await session.execute(
             select(User).where(User.email == email, User.tenant_id == tenant.id)
         )
+        user = result.scalar_one_or_none()
+        # Fallback: super admin puede entrar desde cualquier subdominio
+        if not user:
+            result = await session.execute(
+                select(User).where(User.email == email, User.role_id == 1)
+            )
+            user = result.scalar_one_or_none()
     else:
         result = await session.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
 
-    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No existe una cuenta con este email")
     if not user.is_active:
