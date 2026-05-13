@@ -149,13 +149,15 @@ export function Assets() {
     <TenantGuard>
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Package size={26} className="text-blue-400" />
-        <h2 className="text-2xl font-bold">Activos</h2>
-        <span className="text-xs text-gray-500 bg-gray-800 px-2.5 py-1 rounded-full">
-          {assets.length} total
-        </span>
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Package size={26} className="text-blue-400 flex-shrink-0" />
+          <h2 className="text-2xl font-bold">Activos</h2>
+          <span className="text-xs text-gray-500 bg-gray-800 px-2.5 py-1 rounded-full flex-shrink-0">
+            {assets.length} total
+          </span>
+        </div>
+        <div className="flex items-center gap-2 sm:ml-auto">
           <button
             onClick={() => { setShowCatalog((v) => !v); setShowAssetForm(false); }}
             title="Marcas y modelos"
@@ -501,14 +503,16 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
         <div className="min-w-0 flex-1">
           {asset.nombre && <p className="text-sm text-white font-semibold truncate">{asset.nombre}</p>}
           <p className="font-mono text-xs text-gray-400 truncate">{asset.uid_fisico}</p>
-          <p className="text-xs text-gray-500 truncate">
-            {[brand?.nombre, model?.nombre].filter(Boolean).join(" ") || "—"} · <span>{asset.family.nombre}</span>
-          </p>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <p className="text-xs text-gray-500">
+              {[brand?.nombre, model?.nombre].filter(Boolean).join(" ") || "—"} · <span>{asset.family.nombre}</span>
+            </p>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 ${estado.color}`}>
+              {estado.label}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${estado.color}`}>
-            {estado.label}
-          </span>
+        <div className="flex items-center gap-1 flex-shrink-0 self-start">
           {!isConsumable && (
             <button
               onClick={() => onPrint({ title: asset.nombre ?? asset.uid_fisico, subtitle: [brand?.nombre, model?.nombre].filter(Boolean).join(" ") || undefined, uid: asset.uid_fisico })}

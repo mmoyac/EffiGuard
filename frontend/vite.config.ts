@@ -49,5 +49,12 @@ export default defineConfig({
       usePolling: true,
       interval: 1000,
     },
+    proxy: {
+      "/n8n-webhook": {
+        target: "https://n8n.effi4tech.cl",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/n8n-webhook/, ""),
+      },
+    },
   },
 });

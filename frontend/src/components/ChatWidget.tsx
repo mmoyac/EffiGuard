@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { MessageCircle, X, Send, Bot, User, Loader2 } from "lucide-react";
 
-const WEBHOOK_URL = "https://n8n.masasestacion.cl/webhook/9dd3e269-578f-42e9-a896-cd70d53d9413/chat";
+const WEBHOOK_URL = import.meta.env.DEV
+  ? "/n8n-webhook/webhook/9dd3e269-578f-42e9-a896-cd70d53d9413/chat"
+  : "https://n8n.effi4tech.cl/webhook/9dd3e269-578f-42e9-a896-cd70d53d9413/chat";
 
 // sessionId fijo por pestaña — mantiene historial de conversación en n8n
 const SESSION_ID = `effiguard-${Math.random().toString(36).slice(2)}`;
@@ -38,11 +40,18 @@ export function ChatWidget() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "sendMessage", chatInput: text, sessionId: SESSION_ID }),
       });
+      if (!res.ok) {
+        const body = await res.text();
+        console.error(`[ChatWidget] n8n respondió ${res.status}:`, body);
+        setMessages((m) => [...m, { role: "assistant", text: `Error ${res.status} del agente. Revisa la consola.` }]);
+        return;
+      }
       const data = await res.json();
       const reply = data?.output ?? data?.message ?? "Sin respuesta del agente.";
       setMessages((m) => [...m, { role: "assistant", text: reply }]);
-    } catch {
-      setMessages((m) => [...m, { role: "assistant", text: "Error al contactar al agente. Intenta nuevamente." }]);
+    } catch (err) {
+      console.error("[ChatWidget] Error de red contactando n8n:", err);
+      setMessages((m) => [...m, { role: "assistant", text: "Error de red al contactar el agente. Revisa la consola." }]);
     } finally {
       setLoading(false);
     }
