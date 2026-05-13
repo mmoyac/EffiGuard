@@ -77,6 +77,50 @@ async def login(request: LoginRequest, session: AsyncSession, host: str = "") ->
     )
 
 
+async def google_login(id_token_str: str, session: AsyncSession, host: str = "") -> TokenResponse:
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+    import asyncio
+
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Google login no configurado")
+
+    try:
+        loop = asyncio.get_event_loop()
+        idinfo = await loop.run_in_executor(
+            None,
+            lambda: google_id_token.verify_oauth2_token(
+                id_token_str, google_requests.Request(), settings.GOOGLE_CLIENT_ID
+            ),
+        )
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de Google inválido")
+
+    email = idinfo.get("email")
+    if not email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No se pudo obtener el email de Google")
+
+    slug = _extract_slug(host)
+    if slug:
+        tenant = await _resolve_tenant(slug, session)
+        result = await session.execute(
+            select(User).where(User.email == email, User.tenant_id == tenant.id)
+        )
+    else:
+        result = await session.execute(select(User).where(User.email == email))
+
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No existe una cuenta con este email")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tu cuenta está desactivada. Contacta al administrador.")
+
+    return TokenResponse(
+        access_token=create_access_token(user.id, user.tenant_id, user.role_id),
+        refresh_token=create_refresh_token(user.id),
+    )
+
+
 async def refresh(refresh_token: str, session: AsyncSession) -> TokenResponse:
     try:
         payload = decode_token(refresh_token)

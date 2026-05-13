@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 
 from app.core.dependencies import CurrentToken, DBSession
-from app.schemas.auth import LoginRequest, MeResponse, RefreshRequest, TokenResponse
+from app.schemas.auth import GoogleLoginRequest, LoginRequest, MeResponse, RefreshRequest, TokenResponse
 from app.services import auth as auth_service
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -11,6 +11,12 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 async def login(request: LoginRequest, session: DBSession, http_request: Request):
     host = http_request.headers.get("host", "")
     return await auth_service.login(request, session, host)
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_login(request: GoogleLoginRequest, session: DBSession, http_request: Request):
+    host = http_request.headers.get("host", "")
+    return await auth_service.google_login(request.id_token, session, host)
 
 
 @router.post("/refresh", response_model=TokenResponse)

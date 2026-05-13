@@ -34,6 +34,7 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS}
       ENVIRONMENT: ${ENVIRONMENT}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
     ports:
       - "8000:8000"
     volumes:
@@ -55,6 +56,7 @@ services:
       - /app/node_modules
     environment:
       VITE_API_URL: ${VITE_API_URL}
+      VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
 
 volumes:
   postgres_data:

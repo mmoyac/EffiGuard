@@ -19,9 +19,9 @@ from app.repositories.asset import AssetRepository
 router = APIRouter(prefix="/assets/import", tags=["Assets Import"])
 
 _COLUMNS = [
+    "uid_fisico",
     "nombre",
     "familia",
-    "uid_fisico",
     "estado",
     "stock_actual",
     "stock_minimo",
@@ -31,8 +31,8 @@ _COLUMNS = [
 ]
 
 _EXAMPLES = [
-    ["Taladro Bosch GBH 2-26", "Herramientas Eléctricas", "", "Disponible", "", "", "85000", "7", ""],
-    ["Guantes Nitrilo M", "EPP Consumibles", "", "Disponible", "100", "20", "1500", "", ""],
+    ["", "Taladro Bosch GBH 2-26", "Herramientas Eléctricas", "Disponible", "", "", "85000", "7", ""],
+    ["", "Guantes Nitrilo M",       "EPP Consumibles",         "Disponible", "100", "20", "1500", "", ""],
 ]
 
 
@@ -80,9 +80,9 @@ async def download_template(token: CurrentToken, session: DBSession):
         for row_idx, asset in enumerate(assets, start=2):
             familia_nombre = families_by_id.get(asset.family_id, "")
             estado_nombre = states_by_id.get(asset.estado_id, "Disponible")
-            ws.cell(row=row_idx, column=1, value=asset.nombre or "")
-            ws.cell(row=row_idx, column=2, value=familia_nombre)
-            ws.cell(row=row_idx, column=3, value=asset.uid_fisico)
+            ws.cell(row=row_idx, column=1, value=asset.uid_fisico)
+            ws.cell(row=row_idx, column=2, value=asset.nombre or "")
+            ws.cell(row=row_idx, column=3, value=familia_nombre)
             ws.cell(row=row_idx, column=4, value=estado_nombre)
             ws.cell(row=row_idx, column=5, value=asset.stock_actual)
             ws.cell(row=row_idx, column=6, value=asset.stock_minimo)
@@ -177,9 +177,9 @@ async def import_assets(
                 return None
             return row[idx].value
 
-        nombre = cell_value(0)
-        familia_nombre = cell_value(1)
-        uid_fisico = cell_value(2)
+        uid_fisico = cell_value(0)
+        nombre = cell_value(1)
+        familia_nombre = cell_value(2)
         estado_nombre = cell_value(3) or "Disponible"
         stock_actual_raw = cell_value(4)
         stock_minimo_raw = cell_value(5)
@@ -188,7 +188,7 @@ async def import_assets(
         proxima_raw = cell_raw(8)
 
         # Ignorar filas completamente vacías
-        if nombre is None and familia_nombre is None and uid_fisico is None:
+        if uid_fisico is None and nombre is None and familia_nombre is None:
             continue
 
         if not nombre:

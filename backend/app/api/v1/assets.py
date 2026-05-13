@@ -10,9 +10,9 @@ router = APIRouter(prefix="/assets", tags=["Assets"])
 
 
 @router.get("", response_model=list[AssetResponse])
-async def list_assets(token: CurrentToken, session: DBSession, skip: int = 0, limit: int = 50):
+async def list_assets(token: CurrentToken, session: DBSession, skip: int = 0, limit: int = 50, comportamiento: str | None = None):
     repo = AssetRepository(session, token.tenant_id)
-    return await repo.list(offset=skip, limit=limit)
+    return await repo.list_filtered(comportamiento=comportamiento, offset=skip, limit=limit)
 
 
 @router.post("", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
@@ -92,6 +92,26 @@ async def get_asset(asset_id: int, token: CurrentToken, session: DBSession):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
     return asset
 
+
+@router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_asset(asset_id: int, token: CurrentToken, session: DBSession):
+    from fastapi import HTTPException
+    from app.models.loan import Loan
+    from app.models.inventory_log import InventoryLog
+    from sqlalchemy import select, delete as sql_delete
+    repo = AssetRepository(session, token.tenant_id)
+    asset = await repo.get(asset_id)
+    if not asset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
+    active_loan = await session.execute(
+        select(Loan).where(Loan.asset_id == asset_id, Loan.fecha_devolucion_real.is_(None))
+    )
+    if active_loan.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No se puede eliminar: el activo tiene un préstamo activo")
+    await session.execute(sql_delete(InventoryLog).where(InventoryLog.asset_id == asset_id))
+    await session.execute(sql_delete(Loan).where(Loan.asset_id == asset_id))
+    await repo.delete(asset)
+    await session.commit()
 
 @router.patch("/{asset_id}", response_model=AssetResponse)
 async def update_asset(asset_id: int, data: AssetUpdate, token: CurrentToken, session: DBSession):

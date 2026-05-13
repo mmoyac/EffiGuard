@@ -33,6 +33,14 @@ class AssetRepository(BaseRepository[Asset]):
         )
         return result.scalar_one_or_none()
 
+    async def list_filtered(self, comportamiento: str | None = None, offset: int = 0, limit: int = 50) -> list[Asset]:
+        q = self._base_query()
+        if comportamiento:
+            q = q.join(AssetFamily, Asset.family_id == AssetFamily.id).where(AssetFamily.comportamiento == comportamiento)
+        q = q.offset(offset).limit(limit)
+        result = await self.session.execute(q)
+        return list(result.scalars().all())
+
     async def list_low_stock(self) -> list[Asset]:
         result = await self.session.execute(
             self._base_query()

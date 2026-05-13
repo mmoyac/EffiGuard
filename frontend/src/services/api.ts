@@ -54,6 +54,8 @@ api.interceptors.response.use(
 export const authApi = {
   login: (email: string, password: string) =>
     api.post("/auth/login", { email, password }),
+  googleLogin: (idToken: string) =>
+    api.post("/auth/google", { id_token: idToken }),
   me: () => api.get("/auth/me"),
 };
 
@@ -62,7 +64,11 @@ export const menuApi = {
 };
 
 export const assetsApi = {
-  list: (skip = 0, limit = 50) => api.get(`/assets?skip=${skip}&limit=${limit}`),
+  list: (skip = 0, limit = 50, comportamiento?: string) => {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    if (comportamiento) params.set("comportamiento", comportamiento);
+    return api.get(`/assets?${params}`);
+  },
   getById: (id: number) => api.get(`/assets/${id}`),
   scan: (uid: string) => api.get(`/assets/scan/${uid}`),
   lowStock: () => api.get("/assets/low-stock"),

@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   Package,
+  Layers,
   Wrench,
   TrendingDown,
   TrendingUp,
@@ -18,8 +19,9 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { familyColor } from "../utils/familyColors";
-import { api } from "../services/api";
-import type { InventoryLog } from "../types";
+import { api, assetsApi } from "../services/api";
+import { TenantGuard } from "../components/layout/TenantGuard";
+import type { Asset, InventoryLog } from "../types";
 
 // ─── Config de tipos de movimiento ───────────────────────────────────────────
 
@@ -45,10 +47,17 @@ export function Inventory() {
   const [search, setSearch] = useState("");
   const [filterTipo, setFilterTipo] = useState<string>("all");
   const [filterAsset, setFilterAsset] = useState<string>("all");
+  const [filterComportamiento, setFilterComportamiento] = useState<"" | "prestable" | "consumible">("");
 
   const { data: logs = [], isLoading } = useQuery<InventoryLog[]>(
     "inventory-logs",
     () => api.get("/inventory/logs").then((r) => r.data)
+  );
+
+  const { data: consumables = [] } = useQuery<Asset[]>(
+    ["assets", "consumible"],
+    () => assetsApi.list(0, 200, "consumible").then((r) => r.data),
+    { enabled: filterComportamiento === "consumible" }
   );
 
   // Estadísticas por tipo
@@ -64,12 +73,13 @@ export function Inventory() {
   const assetOptions = useMemo(() => {
     const seen = new Map<number, string>();
     for (const log of logs) {
+      if (filterComportamiento && log.asset_tipo !== filterComportamiento) continue;
       if (!seen.has(log.asset_id)) {
         seen.set(log.asset_id, log.asset_nombre ?? `Activo #${log.asset_id}`);
       }
     }
     return Array.from(seen.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [logs]);
+  }, [logs, filterComportamiento]);
 
   // Filtrado
   const filtered = useMemo(() => {
@@ -77,6 +87,7 @@ export function Inventory() {
     return logs.filter((log) => {
       if (filterTipo !== "all" && log.tipo_movimiento !== filterTipo) return false;
       if (filterAsset !== "all" && log.asset_id !== Number(filterAsset)) return false;
+      if (filterComportamiento && log.asset_tipo !== filterComportamiento) return false;
       if (!q) return true;
       return (
         log.asset_nombre?.toLowerCase().includes(q) ||
@@ -87,7 +98,7 @@ export function Inventory() {
         String(log.asset_id).includes(q)
       );
     });
-  }, [logs, search, filterTipo, filterAsset]);
+  }, [logs, search, filterTipo, filterAsset, filterComportamiento]);
 
   if (isLoading) {
     return (
@@ -99,6 +110,7 @@ export function Inventory() {
   }
 
   return (
+    <TenantGuard>
     <div className="space-y-5">
       {/* Encabezado */}
       <div className="flex items-center gap-3">
@@ -132,6 +144,23 @@ export function Inventory() {
         })}
       </div>
 
+      {/* Filtro comportamiento */}
+      <div className="flex gap-1 bg-gray-800/60 border border-gray-700 rounded-xl p-1 w-fit">
+        {(["", "prestable", "consumible"] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => { setFilterComportamiento(v); setFilterAsset("all"); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors min-h-[34px] ${
+              filterComportamiento === v ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
+            }`}
+          >
+            {v === "" && "Todos"}
+            {v === "prestable" && <><Package size={13} /> Prestables</>}
+            {v === "consumible" && <><Layers size={13} /> Consumibles</>}
+          </button>
+        ))}
+      </div>
+
       {/* Barra de búsqueda y filtros */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
@@ -144,19 +173,31 @@ export function Inventory() {
             className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
         </div>
-        <select
-          value={filterAsset}
-          onChange={(e) => setFilterAsset(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 sm:w-56"
-        >
-          <option value="all">Todos los activos</option>
-          {assetOptions.map(([id, nombre]) => (
-            <option key={id} value={id}>{nombre}</option>
-          ))}
-        </select>
-        {(filterTipo !== "all" || filterAsset !== "all") && (
+        <div className="flex items-center gap-2">
+          <select
+            value={filterAsset}
+            onChange={(e) => setFilterAsset(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 sm:w-56"
+          >
+            <option value="all">Todos los activos</option>
+            {assetOptions.map(([id, nombre]) => (
+              <option key={id} value={id}>{nombre}</option>
+            ))}
+          </select>
+          {filterComportamiento === "consumible" && filterAsset !== "all" && (() => {
+            const a = consumables.find((c) => c.id === Number(filterAsset));
+            if (!a) return null;
+            const low = a.stock_actual <= a.stock_minimo;
+            return (
+              <span className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border ${low ? "text-yellow-400 bg-yellow-900/20 border-yellow-800" : "text-green-400 bg-green-900/20 border-green-800"}`}>
+                Stock: {a.stock_actual} / {a.stock_minimo}
+              </span>
+            );
+          })()}
+        </div>
+        {(filterTipo !== "all" || filterAsset !== "all" || filterComportamiento !== "") && (
           <button
-            onClick={() => { setFilterTipo("all"); setFilterAsset("all"); }}
+            onClick={() => { setFilterTipo("all"); setFilterAsset("all"); setFilterComportamiento(""); }}
             className="text-xs px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:text-white hover:border-gray-500 transition"
           >
             Limpiar filtros
@@ -180,6 +221,7 @@ export function Inventory() {
         </div>
       )}
     </div>
+    </TenantGuard>
   );
 }
 

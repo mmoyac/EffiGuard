@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ENVIRONMENT: str = "development"
     BASE_DOMAIN: str = "effi4tech.cl"
+    GOOGLE_CLIENT_ID: str | None = None
 
     @property
     def is_production(self) -> bool:

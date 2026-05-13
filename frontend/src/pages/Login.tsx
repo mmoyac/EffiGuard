@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
+import { GoogleLogin } from "@react-oauth/google";
 import { authApi, getMediaUrl } from "../services/api";
 import { useAuthStore } from "../stores/authStore";
 
@@ -28,8 +29,22 @@ export function Login() {
     }
   }
 
+  async function handleGoogleSuccess(credentialResponse: { credential?: string }) {
+    if (!credentialResponse.credential) return;
+    setError("");
+    try {
+      const { data } = await authApi.googleLogin(credentialResponse.credential);
+      setTokens(data.access_token, data.refresh_token);
+      const { data: user } = await authApi.me();
+      setUser(user);
+      navigate("/");
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? "Error al iniciar sesión con Google");
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-gray-800 rounded-2xl p-8 shadow-2xl">
         {savedLogoUrl
           ? <img src={savedLogoUrl} alt="Logo" className="h-14 max-w-[200px] object-contain mb-2" />
@@ -70,7 +85,36 @@ export function Login() {
             Ingresar
           </button>
         </form>
+
+        <div className="flex items-center my-5">
+          <div className="flex-grow border-t border-gray-600" />
+          <span className="mx-3 text-gray-500 text-sm">o continúa con</span>
+          <div className="flex-grow border-t border-gray-600" />
+        </div>
+
+        <div className="flex justify-center">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => setError("Error al iniciar sesión con Google")}
+            theme="filled_black"
+            shape="rectangular"
+            width="368"
+            text="signin_with"
+          />
+        </div>
       </div>
+
+      <p className="mt-6 text-gray-600 text-xs">
+        Desarrollado por{" "}
+        <a
+          href="https://www.effi4tech.cl"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-gray-500 hover:text-gray-400 underline transition-colors"
+        >
+          Effi4Tech
+        </a>
+      </p>
     </div>
   );
 }

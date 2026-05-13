@@ -76,6 +76,7 @@ class GlobalUserUpdate(BaseModel):
     role_id: int | None = None
     is_active: bool | None = None
     uid_credencial: str | None = None
+    password: str | None = None
 
 
 class RoleResponse(BaseModel):
@@ -267,12 +268,17 @@ async def create_global_user(data: GlobalUserCreate, token: SuperAdminToken, ses
 
 @router.patch("/users/{user_id}", response_model=GlobalUserResponse)
 async def update_global_user(user_id: int, data: GlobalUserUpdate, token: SuperAdminToken, session: DBSession):
+    from app.core.security import hash_password
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    for k, v in data.model_dump(exclude_none=True).items():
+    fields = data.model_dump(exclude_none=True)
+    password = fields.pop("password", None)
+    for k, v in fields.items():
         setattr(user, k, v)
+    if password:
+        user.password_hash = hash_password(password)
     await session.commit()
     await session.refresh(user)
     return user

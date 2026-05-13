@@ -16,6 +16,7 @@ function generateUid(prefix: string): string {
 import { assetsApi, catalogApi, api } from "../services/api";
 import { CameraScanner } from "../components/scanner/CameraScanner";
 import { NFCScanner } from "../components/scanner/NFCScanner";
+import { TenantGuard } from "../components/layout/TenantGuard";
 import type { Asset, AssetFamily } from "../types";
 import { familyColor, COLOR_OPTIONS } from "../utils/familyColors";
 
@@ -51,14 +52,16 @@ export function Assets() {
   const [nfcScanningUid, setNfcScanningUid] = useState(false);
   const [tipoSeleccionado, setTipoSeleccionado] = useState(false);
   const uidInputRef = useRef<HTMLInputElement>(null);
+  const [filtroComportamiento, setFiltroComportamiento] = useState<"" | "prestable" | "consumible">("");
 
   const [showBrandForm, setShowBrandForm] = useState(false);
   const [brandForm, setBrandForm] = useState(EMPTY_BRAND);
   const [showModelForm, setShowModelForm] = useState(false);
   const [modelForm, setModelForm] = useState(EMPTY_MODEL);
 
-  const { data: assets = [], isLoading } = useQuery<Asset[]>("assets", () =>
-    assetsApi.list().then((r) => r.data)
+  const { data: assets = [], isLoading } = useQuery<Asset[]>(
+    ["assets", filtroComportamiento],
+    () => assetsApi.list(0, 50, filtroComportamiento || undefined).then((r) => r.data)
   );
   const { data: families = [] } = useQuery<AssetFamily[]>("asset-families", () =>
     api.get("/asset-families").then((r) => r.data)
@@ -143,6 +146,7 @@ export function Assets() {
   );
 
   return (
+    <TenantGuard>
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -177,6 +181,25 @@ export function Assets() {
             <Plus size={16} /> Nuevo activo
           </button>
         </div>
+      </div>
+
+      {/* Filtro comportamiento */}
+      <div className="flex gap-1 bg-gray-800/60 border border-gray-700 rounded-xl p-1 w-fit">
+        {(["", "prestable", "consumible"] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setFiltroComportamiento(v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors min-h-[34px] ${
+              filtroComportamiento === v
+                ? "bg-gray-700 text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            {v === "" && "Todos"}
+            {v === "prestable" && <><Package size={13} /> Prestables</>}
+            {v === "consumible" && <><Layers size={13} /> Consumibles</>}
+          </button>
+        ))}
       </div>
 
       {/* Panel catálogo — marcas y modelos */}
@@ -239,26 +262,12 @@ export function Assets() {
               {assetError && <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 px-3 py-2 rounded-lg">{assetError}</p>}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-                {/* Nombre */}
-                <div className="sm:col-span-2 space-y-1">
-                  <label className="text-xs font-medium text-gray-300">
-                    Nombre <span className="text-gray-500 font-normal">(opcional)</span>
-                  </label>
-                  <p className="text-xs text-gray-500">
-                    {isConsumableForm ? "Ej: Tornillo 1/2\", Cinta aislante, Pegamento PVC" : "Ej: Taladro percutor, Amoladora 9\""}
-                  </p>
-                  <input placeholder={isConsumableForm ? "Nombre del consumible" : `Nombre de ${selectedFamily?.nombre.toLowerCase() ?? "activo"}`}
-                    value={assetForm.nombre}
-                    onChange={(e) => setAssetForm({ ...assetForm, nombre: e.target.value })}
-                    className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
-                </div>
-
                 {/* Código identificador */}
                 <div className="sm:col-span-2 space-y-1">
                   <label className="text-xs font-medium text-gray-300">Código identificador <span className="text-red-400">*</span></label>
                   <p className="text-xs text-gray-500">
                     {isConsumableForm
-                      ? "Escanea o escribe el código de barras del producto"
+                      ? "Escanea el código de barras de fábrica — debe ser único en el sistema"
                       : "Puedes generar un código QR automático o escanear el tag RFID físico"}
                   </p>
                   <div className="flex gap-2">
@@ -282,6 +291,20 @@ export function Assets() {
                   </div>
                   {scanningUid && <CameraScanner active={scanningUid} onScan={(uid) => { setAssetForm((f) => ({ ...f, uid_fisico: uid })); setScanningUid(false); }} />}
                   {nfcScanningUid && <NFCScanner active={nfcScanningUid} onScan={(uid) => { setAssetForm((f) => ({ ...f, uid_fisico: uid })); setNfcScanningUid(false); }} />}
+                </div>
+
+                {/* Nombre */}
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-xs font-medium text-gray-300">
+                    Nombre <span className="text-gray-500 font-normal">(opcional)</span>
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    {isConsumableForm ? "Ej: Tornillo 1/2\", Cinta aislante, Pegamento PVC" : "Ej: Taladro percutor, Amoladora 9\""}
+                  </p>
+                  <input placeholder={isConsumableForm ? "Nombre del consumible" : `Nombre de ${selectedFamily?.nombre.toLowerCase() ?? "activo"}`}
+                    value={assetForm.nombre}
+                    onChange={(e) => setAssetForm({ ...assetForm, nombre: e.target.value })}
+                    className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
                 </div>
 
                 {/* Modelo */}
@@ -422,6 +445,7 @@ export function Assets() {
       )}
       {showImport && <ImportAssetsModal onClose={() => setShowImport(false)} />}
     </div>
+    </TenantGuard>
   );
 }
 
@@ -435,12 +459,22 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
   const [purchaseQty, setPurchaseQty] = useState(1);
   const [purchaseObs, setPurchaseObs] = useState("");
   const [purchaseError, setPurchaseError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const estado = ESTADO[asset.estado_id] ?? { label: "Desconocido", color: "text-gray-400 bg-gray-800 border-gray-700" };
   const isConsumable = asset.family.comportamiento === "consumible";
   const lowStock = isConsumable && asset.stock_actual <= asset.stock_minimo;
   const model = models.find((m) => m.id === asset.model_id);
   const brand = model ? brands.find((b) => b.id === model.brand_id) : null;
+
+  const deleteAsset = useMutation(
+    () => api.delete(`/assets/${asset.id}`),
+    {
+      onSuccess: () => { qc.invalidateQueries("assets"); },
+      onError: (e: any) => { setDeleteError(e?.response?.data?.detail ?? "Error al eliminar"); setConfirmDelete(false); },
+    }
+  );
 
   const purchase = useMutation(
     () => api.post(`/assets/${asset.id}/purchase`, { cantidad: purchaseQty, observaciones: purchaseObs || null }),
@@ -488,8 +522,30 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
             title="Editar">
             <Settings2 size={14} />
           </button>
+          {confirmDelete ? (
+            <div className="flex items-center gap-1">
+              <button onClick={() => deleteAsset.mutate()} disabled={deleteAsset.isLoading}
+                className="px-2 py-1 rounded-lg text-xs font-semibold bg-red-700 hover:bg-red-600 text-white transition-colors disabled:opacity-50">
+                {deleteAsset.isLoading ? "…" : "Sí"}
+              </button>
+              <button onClick={() => { setConfirmDelete(false); setDeleteError(""); }}
+                className="px-2 py-1 rounded-lg text-xs text-gray-400 hover:bg-gray-700 transition-colors">
+                No
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmDelete(true)}
+              className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-gray-700 transition-colors"
+              title="Eliminar">
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       </div>
+
+      {deleteError && (
+        <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 px-3 py-2 rounded-lg">{deleteError}</p>
+      )}
 
       {isConsumable && (
         <div className="space-y-2">
