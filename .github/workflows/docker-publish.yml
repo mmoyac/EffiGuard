@@ -110,6 +110,8 @@ jobs:
             echo "B2_KEY_ID=${{ secrets.B2_KEY_ID }}" >> .env
             echo "B2_APPLICATION_KEY=${{ secrets.B2_APPLICATION_KEY }}" >> .env
             echo "B2_BUCKET_NAME=${{ secrets.B2_BUCKET_NAME }}" >> .env
+            sed -i '/^GOOGLE_CLIENT_ID=/d' .env
+            echo "GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" >> .env
 
             # Permisos correctos para scripts
             chmod +x scripts/add-tenant.sh

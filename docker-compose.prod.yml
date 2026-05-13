@@ -48,6 +48,7 @@ services:
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
       ENVIRONMENT: production
       BASE_DOMAIN: effi4tech.cl
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
     networks:
       - internal
     logging:
