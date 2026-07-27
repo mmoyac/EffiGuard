@@ -295,10 +295,18 @@ function LogCard({ log }: { log: InventoryLog }) {
           )}
         </div>
 
-        {/* Cantidad */}
-        <span className={`flex-shrink-0 text-lg font-bold ${isNegative ? "text-red-400" : "text-green-400"}`}>
-          {cantidadStr}
-        </span>
+        {/* Cantidad y su costo */}
+        <div className="flex-shrink-0 text-right">
+          <span className={`text-lg font-bold ${isNegative ? "text-red-400" : "text-green-400"}`}>
+            {cantidadStr}
+          </span>
+          {/* null = sin valorizar, distinto de $0 — por eso se compara con != null */}
+          {log.costo_total != null && (
+            <p className="text-xs text-gray-500">
+              ${Math.round(log.costo_total).toLocaleString("es-CL")}
+            </p>
+          )}
+        </div>
 
         {/* Expand */}
         <span className="flex-shrink-0 text-gray-600">

@@ -1,5 +1,4 @@
 import io
-import uuid
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -11,13 +10,19 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from app.core.dependencies import CurrentToken, DBSession
+from app.core.uid import generar_uid
 from app.models.asset import Asset
 from app.models.asset_family import AssetFamily
 from app.models.asset_state import AssetState
+from app.models.ubicacion import Ubicacion
 from app.repositories.asset import AssetRepository
+from app.repositories.ubicacion import UbicacionRepository
+from app.schemas.asset import UNIDADES_VALIDAS
 
 router = APIRouter(prefix="/assets/import", tags=["Assets Import"])
 
+# El importador lee las celdas por índice: las columnas nuevas SIEMPRE se agregan
+# al final. Insertarlas en medio rompería en silencio los archivos ya descargados.
 _COLUMNS = [
     "uid_fisico",
     "nombre",
@@ -28,11 +33,20 @@ _COLUMNS = [
     "valor_reposicion",
     "dias_max_prestamo",
     "proxima_mantencion",
+    "ubicacion_rack",
+    "ubicacion_nivel",
+    "ubicacion_posicion",
+    "unidad",
+    "codigo_fabricante",
+    "contenido_por_empaque",
+    "nombre_empaque",
+    "precio_compra",
 ]
 
 _EXAMPLES = [
-    ["", "Taladro Bosch GBH 2-26", "Herramientas Eléctricas", "Disponible", "", "", "85000", "7", ""],
-    ["", "Guantes Nitrilo M",       "EPP Consumibles",         "Disponible", "100", "20", "1500", "", ""],
+    ["", "Taladro Bosch GBH 2-26", "Herramientas Eléctricas", "Disponible", "", "", "85000", "7", "", "3", "5", "11", "unidad", "7891234567890", "", "", ""],
+    ["", "Tornillo Zincado M3.5x15", "EPP Consumibles",       "Disponible", "9000", "1000", "12", "", "", "1", "2", "4", "unidad", "5001216328235", "100", "caja", "120"],
+    ["", "Luces LED",              "EPP Consumibles",         "Disponible", "250.5", "50", "1200", "", "", "2", "1", "7", "metro", "", "100", "rollo", "1200"],
 ]
 
 
@@ -52,6 +66,12 @@ async def download_template(token: CurrentToken, session: DBSession):
     # Cargar estados globales (id → nombre)
     states_result = await session.execute(select(AssetState))
     states_by_id: dict[int, str] = {s.id: s.nombre for s in states_result.scalars().all()}
+
+    # Cargar ubicaciones del tenant (id → terna)
+    ubic_result = await session.execute(
+        select(Ubicacion).where(Ubicacion.tenant_id == token.tenant_id)
+    )
+    ubic_by_id: dict[int, Ubicacion] = {u.id: u for u in ubic_result.scalars().all()}
 
     # Cargar activos del tenant (solo raíz — sin hijos de kits para no duplicar)
     assets_result = await session.execute(
@@ -89,12 +109,21 @@ async def download_template(token: CurrentToken, session: DBSession):
             ws.cell(row=row_idx, column=7, value=float(asset.valor_reposicion) if asset.valor_reposicion else "")
             ws.cell(row=row_idx, column=8, value=asset.dias_max_prestamo or "")
             ws.cell(row=row_idx, column=9, value=str(asset.proxima_mantencion) if asset.proxima_mantencion else "")
+            ubic = ubic_by_id.get(asset.ubicacion_id) if asset.ubicacion_id else None
+            ws.cell(row=row_idx, column=10, value=ubic.rack if ubic else "")
+            ws.cell(row=row_idx, column=11, value=ubic.nivel if ubic else "")
+            ws.cell(row=row_idx, column=12, value=ubic.posicion if ubic else "")
+            ws.cell(row=row_idx, column=13, value=asset.unidad or "unidad")
+            ws.cell(row=row_idx, column=14, value=asset.codigo_fabricante or "")
+            ws.cell(row=row_idx, column=15, value=float(asset.contenido_por_empaque) if asset.contenido_por_empaque else "")
+            ws.cell(row=row_idx, column=16, value=asset.nombre_empaque or "")
+            ws.cell(row=row_idx, column=17, value=float(asset.precio_compra) if asset.precio_compra else "")
     else:
         for row_idx, row_data in enumerate(_EXAMPLES, start=2):
             for col_idx, value in enumerate(row_data, start=1):
                 ws.cell(row=row_idx, column=col_idx, value=value)
 
-    widths = [30, 25, 22, 15, 13, 13, 16, 16, 20]
+    widths = [30, 25, 22, 15, 13, 13, 16, 16, 20, 15, 15, 17, 10, 20, 21, 15, 15]
     for col_idx, width in enumerate(widths, start=1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = width
 
@@ -153,14 +182,42 @@ async def import_assets(
     )
     tenant_assets: dict[str, Asset] = {a.uid_fisico: a for a in tenant_assets_result.scalars().all()}
 
-    # Todos los UIDs del sistema (para detectar colisión con otros tenants)
-    all_uids_result = await session.execute(select(Asset.uid_fisico))
-    all_uids: set[str] = {uid for (uid,) in all_uids_result.all()}
+    # Sólo los UIDs de ESTE tenant: desde la migración 017 la unicidad es por
+    # tenant, así que un código usado por otro cliente ya no es un conflicto.
+    tenant_uids: set[str] = set(tenant_assets)
 
     to_create: list[dict] = []
     to_update: list[tuple[Asset, dict]] = []
     errores: list[dict] = []
     uids_en_archivo: set[str] = set()
+
+    # ── Resolución de ubicaciones ────────────────────────────────────────────
+    ubic_repo = UbicacionRepository(session, token.tenant_id)
+    ubicaciones_cache: dict[tuple[str, str, str], int] = {}
+    ubicaciones_creadas: set[tuple[str, str, str]] = set()
+
+    async def resolver_ubicacion(terna: tuple[str, str, str]) -> int | None:
+        """Resuelve la terna contra el catálogo y la crea si no existe.
+
+        Se crea en vez de rechazar la fila porque una ubicación es una etiqueta de
+        dónde está algo, no configuración con significado de negocio como la
+        familia o el estado. En dry_run no se persiste nada: sólo se cuenta.
+        """
+        clave = tuple(v.strip().upper() for v in terna)
+        if clave in ubicaciones_cache:
+            return ubicaciones_cache[clave]
+
+        existente = await ubic_repo.get_by_posicion(*clave)
+        if existente:
+            ubicaciones_cache[clave] = existente.id
+            return existente.id
+
+        ubicaciones_creadas.add(clave)
+        if dry_run:
+            return None
+        nueva = await ubic_repo.create(rack=clave[0], nivel=clave[1], posicion=clave[2])
+        ubicaciones_cache[clave] = nueva.id
+        return nueva.id
 
     for row_idx, row in enumerate(rows[1:], start=2):
         def cell_value(idx: int) -> str | None:
@@ -186,6 +243,16 @@ async def import_assets(
         valor_reposicion_raw = cell_value(6)
         dias_max_raw = cell_value(7)
         proxima_raw = cell_raw(8)
+        # Columnas nuevas: los archivos del template anterior no las traen y
+        # cell_value() devuelve None para índices fuera de rango.
+        rack_raw = cell_value(9)
+        nivel_raw = cell_value(10)
+        posicion_raw = cell_value(11)
+        unidad_raw = cell_value(12)
+        codigo_fab_raw = cell_value(13)
+        contenido_raw = cell_value(14)
+        nombre_empaque_raw = cell_value(15)
+        precio_raw = cell_value(16)
 
         # Ignorar filas completamente vacías
         if uid_fisico is None and nombre is None and familia_nombre is None:
@@ -210,15 +277,16 @@ async def import_assets(
             errores.append({"fila": row_idx, "motivo": f"estado '{estado_nombre}' inválido. Opciones: {opciones}"})
             continue
 
-        # Parsear campos numéricos
-        stock_actual = _parse_int(stock_actual_raw, 0)
-        if stock_actual is None:
-            errores.append({"fila": row_idx, "motivo": f"stock_actual '{stock_actual_raw}' no es un entero válido"})
+        # Parsear campos numéricos. Todos usan False como sentinela de error:
+        # None es un default legítimo (dias_max_prestamo vacío = sin límite).
+        stock_actual = _parse_cantidad(stock_actual_raw)
+        if stock_actual is False:
+            errores.append({"fila": row_idx, "motivo": f"stock_actual '{stock_actual_raw}' no es un número válido"})
             continue
 
-        stock_minimo = _parse_int(stock_minimo_raw, 0)
-        if stock_minimo is None:
-            errores.append({"fila": row_idx, "motivo": f"stock_minimo '{stock_minimo_raw}' no es un entero válido"})
+        stock_minimo = _parse_cantidad(stock_minimo_raw)
+        if stock_minimo is False:
+            errores.append({"fila": row_idx, "motivo": f"stock_minimo '{stock_minimo_raw}' no es un número válido"})
             continue
 
         valor_reposicion = _parse_decimal(valor_reposicion_raw)
@@ -236,10 +304,46 @@ async def import_assets(
             errores.append({"fila": row_idx, "motivo": f"proxima_mantencion '{proxima_raw}' debe tener formato YYYY-MM-DD"})
             continue
 
+        unidad = (unidad_raw or "unidad").strip().lower()
+        if unidad not in UNIDADES_VALIDAS:
+            errores.append({"fila": row_idx, "motivo": f"unidad '{unidad_raw}' inválida. Opciones: {', '.join(UNIDADES_VALIDAS)}"})
+            continue
+
+        precio_compra = _parse_cantidad(precio_raw, None)
+        if precio_compra is False:
+            errores.append({"fila": row_idx, "motivo": f"precio_compra '{precio_raw}' no es un número válido"})
+            continue
+        if precio_compra is not None and precio_compra <= 0:
+            errores.append({"fila": row_idx, "motivo": "precio_compra debe ser mayor a 0"})
+            continue
+
+        contenido_por_empaque = _parse_cantidad(contenido_raw, None)
+        if contenido_por_empaque is False:
+            errores.append({"fila": row_idx, "motivo": f"contenido_por_empaque '{contenido_raw}' no es un número válido"})
+            continue
+        if contenido_por_empaque is not None and contenido_por_empaque <= 0:
+            errores.append({"fila": row_idx, "motivo": "contenido_por_empaque debe ser mayor a 0"})
+            continue
+
+        # Ubicación: la terna va completa o no va. Media ubicación no ubica nada.
+        terna = (rack_raw, nivel_raw, posicion_raw)
+        if any(terna) and not all(terna):
+            errores.append({"fila": row_idx, "motivo": "la ubicación requiere rack, nivel y posición"})
+            continue
+
+        ubicacion_id = await resolver_ubicacion(terna) if all(terna) else None
+
         data = {
             "nombre": nombre,
             "family_id": family_id,
             "estado_id": state_id,
+            "ubicacion_id": ubicacion_id,
+            "unidad": unidad,
+            # No es único: las unidades del mismo producto lo comparten
+            "codigo_fabricante": codigo_fab_raw.strip().upper() if codigo_fab_raw else None,
+            "contenido_por_empaque": contenido_por_empaque,
+            "nombre_empaque": nombre_empaque_raw.strip().lower() if nombre_empaque_raw else None,
+            "precio_compra": precio_compra,
             "stock_actual": stock_actual,
             "stock_minimo": stock_minimo,
             "valor_reposicion": valor_reposicion,
@@ -249,7 +353,7 @@ async def import_assets(
 
         if not uid_fisico:
             # Nuevo activo — generar UID
-            uid_fisico = _generate_uid(all_uids | uids_en_archivo)
+            uid_fisico = generar_uid(tenant_uids | uids_en_archivo)
             uids_en_archivo.add(uid_fisico)
             to_create.append({"uid_fisico": uid_fisico, **data})
 
@@ -260,11 +364,6 @@ async def import_assets(
                 continue
             uids_en_archivo.add(uid_fisico)
             to_update.append((tenant_assets[uid_fisico], data))
-
-        elif uid_fisico in all_uids:
-            # UID existe pero pertenece a otro tenant
-            errores.append({"fila": row_idx, "motivo": f"uid_fisico '{uid_fisico}' pertenece a otro tenant"})
-            continue
 
         else:
             # UID nuevo no existente en el sistema → crear con ese UID
@@ -295,26 +394,39 @@ async def import_assets(
         "actualizados": actualizados if not dry_run else 0,
         "validados_crear": len(to_create),
         "validados_actualizar": len(to_update),
+        # Se informa para que un error de tipeo masivo en el archivo sea visible:
+        # sin este dato, el catálogo crecería en silencio.
+        "ubicaciones_creadas": len(ubicaciones_creadas),
+        "ubicaciones_creadas_detalle": sorted(" · ".join(k) for k in ubicaciones_creadas),
         "errores": errores,
     }
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def _generate_uid(used: set[str]) -> str:
-    while True:
-        uid = f"EFG-{uuid.uuid4().hex[:8].upper()}"
-        if uid not in used:
-            return uid
-
-
 def _parse_int(value: str | None, default):
+    """False si el valor no es un entero válido.
+
+    Antes devolvía None en el caso de error, que colisionaba con el default None
+    de dias_max_prestamo: un valor inválido se guardaba como 'sin límite' en vez
+    de reportarse como error de fila.
+    """
     if value is None:
         return default
     try:
-        return int(float(value))
+        return int(float(str(value).strip().replace(",", ".")))
     except (ValueError, TypeError):
-        return None
+        return False
+
+
+def _parse_cantidad(value: str | None, default=Decimal(0)):
+    """Cantidad de stock: hasta 3 decimales, acepta coma o punto. False si es inválida."""
+    if value is None:
+        return default
+    try:
+        return Decimal(str(value).strip().replace(",", ".")).quantize(Decimal("0.001"))
+    except (InvalidOperation, ValueError, TypeError):
+        return False
 
 
 def _parse_decimal(value: str | None):

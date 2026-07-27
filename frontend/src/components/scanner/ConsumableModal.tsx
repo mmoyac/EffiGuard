@@ -5,6 +5,7 @@ import { usersApi, projectsApi } from "../../services/api";
 import { CameraScanner } from "./CameraScanner";
 import { NFCScanner } from "./NFCScanner";
 import type { Asset, User } from "../../types";
+import { abrevUnidad, empaquesDeAsset, esMedidaContinua, formatStock, unidadPlural } from "../../utils/cantidad";
 
 interface Project { id: number; nombre: string; is_active: boolean }
 
@@ -17,6 +18,12 @@ interface Props {
 type ScanState = "idle" | "loading" | "found" | "not_found";
 
 export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
+  // No existe medio tornillo, pero sí medio metro de cable
+  const admiteDecimales = esMedidaContinua(asset.unidad);
+  const paso = admiteDecimales ? 0.5 : 1;
+  const minCantidad = admiteDecimales ? 0.001 : 1;
+  const redondear = (v: number) => Math.round(v * 1000) / 1000;
+
   const [cantidad, setCantidad] = useState(1);
   const [projectId, setProjectId] = useState<number | "">("");
   const [observaciones, setObservaciones] = useState("");
@@ -90,10 +97,11 @@ export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
   }
 
   const stockOk = cantidad <= asset.stock_actual;
+  const cantidadOk = cantidad >= minCantidad;
   const effectiveUserId = resolvedUser?.id ?? (showManual ? manualUserId : "");
 
   async function handleConfirm() {
-    if (!stockOk || cantidad < 1 || !effectiveUserId) return;
+    if (!stockOk || !cantidadOk || !effectiveUserId) return;
     setLoading(true);
     try {
       await onConfirm(cantidad, observaciones, Number(effectiveUserId), projectId ? Number(projectId) : null);
@@ -118,11 +126,16 @@ export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
 
         <div className="p-5 space-y-5">
           {/* Stock actual */}
-          <div className="bg-gray-700/50 rounded-xl p-4 flex justify-between items-center">
+          <div className="bg-gray-700/50 rounded-xl p-4 flex justify-between items-center gap-3">
             <span className="text-sm text-gray-300">Stock disponible</span>
-            <span className={`text-2xl font-bold ${asset.stock_actual <= asset.stock_minimo ? "text-yellow-400" : "text-green-400"}`}>
-              {asset.stock_actual}
-            </span>
+            <div className="text-right min-w-0">
+              <span className={`text-2xl font-bold ${asset.stock_actual <= asset.stock_minimo ? "text-yellow-400" : "text-green-400"}`}>
+                {formatStock(asset.stock_actual, asset.unidad)}
+              </span>
+              {empaquesDeAsset(asset) && (
+                <p className="text-xs text-gray-400 mt-0.5 truncate">{empaquesDeAsset(asset)}</p>
+              )}
+            </div>
           </div>
 
           {/* Operario */}
@@ -232,31 +245,53 @@ export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
 
           {/* Selector de cantidad táctil */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-3">Cantidad a retirar</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Cantidad a retirar <span className="text-gray-400 font-normal">(en {unidadPlural(asset.unidad)})</span>
+            </label>
+            {/* El empaque es sólo para comprar: del rollo se cortan metros, no se
+                entregan fracciones de rollo. */}
+            {empaquesDeAsset(asset) && (
+              <p className="text-xs text-gray-500 mb-3">
+                Se retira en {unidadPlural(asset.unidad)}, no en {asset.nombre_empaque ?? "empaque"}s
+              </p>
+            )}
             <div className="flex items-center gap-4">
               <button
-                onClick={() => setCantidad((c) => Math.max(1, c - 1))}
+                onClick={() => setCantidad((c) => Math.max(minCantidad, redondear(c - paso)))}
                 className="flex-none w-14 h-14 bg-gray-700 hover:bg-gray-600 rounded-xl flex items-center justify-center text-white transition-colors min-h-[48px]"
               >
                 <Minus size={22} />
               </button>
-              <input
-                type="number"
-                min={1}
-                max={asset.stock_actual}
-                value={cantidad}
-                onChange={(e) => setCantidad(Math.max(1, parseInt(e.target.value) || 1))}
-                className="flex-1 bg-gray-700 text-white text-center text-3xl font-bold rounded-xl px-4 py-3 min-h-[56px] border border-gray-600 focus:border-orange-500 focus:outline-none"
-              />
+              <div className="flex-1 relative">
+                <input
+                  type="number"
+                  min={minCantidad}
+                  max={asset.stock_actual}
+                  step={paso}
+                  value={cantidad}
+                  onChange={(e) => {
+                    const v = admiteDecimales ? parseFloat(e.target.value) : parseInt(e.target.value);
+                    setCantidad(isNaN(v) ? minCantidad : Math.max(minCantidad, v));
+                  }}
+                  className="w-full bg-gray-700 text-white text-center text-3xl font-bold rounded-xl px-4 py-3 min-h-[56px] border border-gray-600 focus:border-orange-500 focus:outline-none"
+                />
+                {abrevUnidad(asset.unidad) && (
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-semibold pointer-events-none">
+                    {abrevUnidad(asset.unidad)}
+                  </span>
+                )}
+              </div>
               <button
-                onClick={() => setCantidad((c) => Math.min(asset.stock_actual, c + 1))}
+                onClick={() => setCantidad((c) => Math.min(asset.stock_actual, redondear(c + paso)))}
                 className="flex-none w-14 h-14 bg-gray-700 hover:bg-gray-600 rounded-xl flex items-center justify-center text-white transition-colors min-h-[48px]"
               >
                 <Plus size={22} />
               </button>
             </div>
             {!stockOk && (
-              <p className="text-red-400 text-sm mt-2">Stock insuficiente (máx. {asset.stock_actual})</p>
+              <p className="text-red-400 text-sm mt-2">
+                Stock insuficiente (máx. {formatStock(asset.stock_actual, asset.unidad)})
+              </p>
             )}
           </div>
 
@@ -298,10 +333,10 @@ export function ConsumableModal({ asset, onConfirm, onClose }: Props) {
           </button>
           <button
             onClick={handleConfirm}
-            disabled={!stockOk || cantidad < 1 || !effectiveUserId || loading}
+            disabled={!stockOk || !cantidadOk || !effectiveUserId || loading}
             className="flex-1 flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl px-4 py-3 min-h-[48px] transition-colors"
           >
-            {loading ? "Procesando..." : (<><ArrowRight size={18} /> Retirar {cantidad}</>)}
+            {loading ? "Procesando..." : (<><ArrowRight size={18} /> Retirar {formatStock(cantidad, asset.unidad)}</>)}
           </button>
         </div>
       </div>

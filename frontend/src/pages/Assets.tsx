@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "react-query";
 import { Package, Layers, AlertTriangle, Plus, ChevronDown, ChevronUp, Camera, Settings2, X, RefreshCw, Printer, Wifi, Pencil, Trash2, Check, FileSpreadsheet, ShoppingCart } from "lucide-react";
 import { LabelPreviewModal } from "../components/LabelPreviewModal";
 import { ImportAssetsModal } from "../components/assets/ImportAssetsModal";
+import { empaquesDeAsset, formatCantidad, formatStock } from "../utils/cantidad";
 
 /** Genera un UID corto con prefijo, sin caracteres ambiguos (0/O, 1/I/L) */
 function generateUid(prefix: string): string {
@@ -460,6 +461,8 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
   const [showPurchase, setShowPurchase] = useState(false);
   const [purchaseQty, setPurchaseQty] = useState(1);
   const [purchaseObs, setPurchaseObs] = useState("");
+  const [purchaseTotal, setPurchaseTotal] = useState("");
+  const [actualizarPrecio, setActualizarPrecio] = useState(true);
   const [purchaseError, setPurchaseError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -473,19 +476,39 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
   const deleteAsset = useMutation(
     () => api.delete(`/assets/${asset.id}`),
     {
-      onSuccess: () => { qc.invalidateQueries("assets"); },
+      onSuccess: () => { qc.invalidateQueries("assets"); qc.invalidateQueries(["asset", asset.id]); },
       onError: (e: any) => { setDeleteError(e?.response?.data?.detail ?? "Error al eliminar"); setConfirmDelete(false); },
     }
   );
 
+  // Si el activo declara empaque, la compra se ingresa en cajas/rollos y el
+  // backend traduce a unidades. Sin empaque, se ingresa en unidades como antes.
+  const tieneEmpaque = Number(asset.contenido_por_empaque) > 0;
+  const nombreEmpaque = asset.nombre_empaque || "empaque";
+  const nombreEmpaquePlural = nombreEmpaque.endsWith("s") ? nombreEmpaque : `${nombreEmpaque}s`;
+  const unidadesCompradas = tieneEmpaque ? purchaseQty * Number(asset.contenido_por_empaque) : purchaseQty;
+  const precioUnitario = purchaseTotal && unidadesCompradas > 0
+    ? Number(purchaseTotal) / unidadesCompradas
+    : null;
+
   const purchase = useMutation(
-    () => api.post(`/assets/${asset.id}/purchase`, { cantidad: purchaseQty, observaciones: purchaseObs || null }),
+    () => api.post(`/assets/${asset.id}/purchase`, {
+      ...(tieneEmpaque ? { empaques: purchaseQty } : { cantidad: purchaseQty }),
+      ...(purchaseTotal ? { precio_total: Number(purchaseTotal), actualizar_precio: actualizarPrecio } : {}),
+      observaciones: purchaseObs || null,
+    }),
     {
       onSuccess: () => {
         qc.invalidateQueries("assets");
+        // La ficha individual tiene su propia clave: sin esto, entrar a editar
+        // después de comprar muestra el activo de antes de la compra.
+        qc.invalidateQueries(["asset", asset.id]);
+        qc.invalidateQueries("dash-costos");
         setShowPurchase(false);
         setPurchaseQty(1);
         setPurchaseObs("");
+        setPurchaseTotal("");
+        setActualizarPrecio(true);
         setPurchaseError("");
       },
       onError: (e: any) => setPurchaseError(e?.response?.data?.detail ?? "Error al registrar compra"),
@@ -557,10 +580,13 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
             <div className="flex items-center gap-2">
               {lowStock && <AlertTriangle size={14} className="text-yellow-400" />}
               <span className="text-xs text-gray-400">Stock actual / mínimo</span>
+              {empaquesDeAsset(asset) && (
+                <span className="text-xs text-gray-500">· {empaquesDeAsset(asset)}</span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className={`text-sm font-bold ${lowStock ? "text-yellow-400" : "text-green-400"}`}>
-                {asset.stock_actual} / {asset.stock_minimo}
+                {formatStock(asset.stock_actual, asset.unidad)} / {formatCantidad(asset.stock_minimo)}
               </span>
               <button
                 onClick={() => { setShowPurchase((v) => !v); setPurchaseError(""); }}
@@ -585,8 +611,10 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
               {purchaseError && (
                 <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 px-2 py-1.5 rounded-lg">{purchaseError}</p>
               )}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-400 flex-shrink-0">Cantidad</label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="text-xs text-gray-400 flex-shrink-0">
+                  {tieneEmpaque ? `Cantidad de ${nombreEmpaquePlural}` : "Cantidad"}
+                </label>
                 <div className="flex items-center gap-1">
                   <button type="button" onClick={() => setPurchaseQty((q) => Math.max(1, q - 1))}
                     className="w-7 h-7 rounded-lg bg-gray-600 hover:bg-gray-500 text-white text-sm font-bold flex items-center justify-center transition-colors">−</button>
@@ -594,7 +622,40 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
                   <button type="button" onClick={() => setPurchaseQty((q) => q + 1)}
                     className="w-7 h-7 rounded-lg bg-gray-600 hover:bg-gray-500 text-white text-sm font-bold flex items-center justify-center transition-colors">+</button>
                 </div>
+                {tieneEmpaque && (
+                  <span className="text-xs text-green-400 font-medium">
+                    = {formatStock(purchaseQty * Number(asset.contenido_por_empaque), asset.unidad)}
+                  </span>
+                )}
               </div>
+              {/* El precio de la factura: único momento en que se conoce con certeza */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="text-xs text-gray-400 flex-shrink-0">Total de la compra</label>
+                <input
+                  type="number" min={0} step="any" placeholder="$0 (opcional)"
+                  value={purchaseTotal}
+                  onChange={(e) => setPurchaseTotal(e.target.value)}
+                  className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-green-500 w-28"
+                />
+                {precioUnitario !== null && (
+                  <span className="text-xs text-green-400 font-medium">
+                    → ${precioUnitario.toLocaleString("es-CL", { maximumFractionDigits: 4 })} por {asset.unidad}
+                  </span>
+                )}
+              </div>
+
+              {purchaseTotal && (
+                <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={actualizarPrecio}
+                    onChange={(e) => setActualizarPrecio(e.target.checked)}
+                    className="accent-green-500 w-4 h-4"
+                  />
+                  Actualizar el precio del producto
+                </label>
+              )}
+
               <input
                 placeholder="Observaciones (opcional — proveedor, N° factura…)"
                 value={purchaseObs}
@@ -604,7 +665,11 @@ function AssetCard({ asset, models, brands, onEdit, onPrint }: {
               <div className="flex gap-2">
                 <button type="submit" disabled={purchase.isLoading}
                   className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-xl transition-colors min-h-[36px]">
-                  {purchase.isLoading ? "Guardando..." : `Ingresar ${purchaseQty} unidad${purchaseQty !== 1 ? "es" : ""}`}
+                  {purchase.isLoading
+                    ? "Guardando..."
+                    : tieneEmpaque
+                      ? `Ingresar ${purchaseQty} ${purchaseQty === 1 ? nombreEmpaque : nombreEmpaquePlural}`
+                      : `Ingresar ${purchaseQty} unidad${purchaseQty !== 1 ? "es" : ""}`}
                 </button>
                 <button type="button" onClick={() => { setShowPurchase(false); setPurchaseError(""); }}
                   className="px-3 py-2 rounded-xl text-xs text-gray-400 hover:bg-gray-600 transition-colors min-h-[36px]">

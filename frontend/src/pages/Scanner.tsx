@@ -5,14 +5,16 @@ import { ScanResult } from "../components/scanner/ScanResult";
 import { LoanModal } from "../components/scanner/LoanModal";
 import { ConsumableModal } from "../components/scanner/ConsumableModal";
 import { CameraScanner } from "../components/scanner/CameraScanner";
+import { CandidatosModal } from "../components/scanner/CandidatosModal";
 import { NFCScanner } from "../components/scanner/NFCScanner";
 import { ReturnModal } from "../components/scanner/ReturnModal";
 import { LossModal } from "../components/scanner/LossModal";
 import { MermaModal } from "../components/scanner/MermaModal";
+import { ReintegroModal } from "../components/scanner/ReintegroModal";
 import { assetsApi, loansApi } from "../services/api";
-import type { Asset, Loan } from "../types";
+import type { Asset, AssetCandidato, DespachoPendiente, Loan, ScanResolution } from "../types";
 
-type ModalType = "loan" | "return" | "consumable" | "kit" | "loss" | "merma" | "repair_done" | null;
+type ModalType = "loan" | "return" | "consumable" | "kit" | "loss" | "merma" | "reintegro" | "repair_done" | null;
 
 type FeedbackState =
   | { type: "success"; message: string }
@@ -23,6 +25,9 @@ export function Scanner() {
   const [scannedAsset, setScannedAsset] = useState<Asset | null>(null);
   const [kitChildren, setKitChildren] = useState<Asset[]>([]);
   const [activeLoan, setActiveLoan] = useState<Loan | null>(null);
+  const [candidatos, setCandidatos] = useState<AssetCandidato[]>([]);
+  const [codigoFabricante, setCodigoFabricante] = useState<string | null>(null);
+  const [despachos, setDespachos] = useState<DespachoPendiente[]>([]);
   const [modal, setModal] = useState<ModalType>(null);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [loading, setLoading] = useState(false);
@@ -43,32 +48,63 @@ export function Scanner() {
     setKitChildren([]);
     setActiveLoan(null);
     setModal(null);
+    setCandidatos([]);
+    setCodigoFabricante(null);
+    setDespachos([]);
   }
 
-  const handleScan = useCallback(async (uid: string) => {
+  /** Carga un activo ya resuelto y su préstamo activo si corresponde. */
+  const cargarAsset = useCallback(async (asset: Asset) => {
+    setScannedAsset(asset);
+    setKitChildren(asset.children ?? []);
+    if (asset.family.comportamiento === "prestable") {
+      const { data: loan } = await loansApi.activeByAsset(asset.id);
+      setActiveLoan(loan ?? null);
+    } else {
+      // Consumible: saber si hay material despachado sin devolver decide si se
+      // ofrece el reintegro
+      const { data } = await assetsApi.despachosPendientes(asset.id);
+      setDespachos(data ?? []);
+    }
+  }, []);
+
+  const handleScan = useCallback(async (codigo: string) => {
     if (loading) return;
     resetScan();
     setLoading(true);
     try {
-      const { data: asset } = await assetsApi.scan(uid);
+      // El código puede ser el UID de una unidad o el código de fábrica de un
+      // producto; en el segundo caso el backend devuelve varias candidatas.
+      const { data: resolucion }: { data: ScanResolution } = await assetsApi.scan(codigo);
 
-      // Si es kit padre (tiene hijos dentro), separarlos
-      const children: Asset[] = asset.children ?? [];
-      setScannedAsset(asset);
-      setKitChildren(children);
-
-      // Consultar préstamo activo para activos prestables
-      if (asset.family.comportamiento === "prestable") {
-        const { data: loan } = await loansApi.activeByAsset(asset.id);
-        setActiveLoan(loan ?? null);
+      if (resolucion.tipo === "multiple") {
+        setCandidatos(resolucion.candidatos);
+        setCodigoFabricante(resolucion.codigo_fabricante);
+        return;
       }
+      if (resolucion.asset) await cargarAsset(resolucion.asset);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       showFeedback("error", msg ?? "Activo no encontrado");
     } finally {
       setLoading(false);
     }
-  }, [loading]);
+  }, [loading, cargarAsset]);
+
+  /** Tras elegir una candidata, se sigue con el flujo normal sobre esa unidad. */
+  async function handleCandidatoSelect(candidato: AssetCandidato) {
+    setCandidatos([]);
+    setCodigoFabricante(null);
+    setLoading(true);
+    try {
+      const { data: asset } = await assetsApi.getById(candidato.id);
+      await cargarAsset(asset);
+    } catch {
+      showFeedback("error", "No se pudo cargar la unidad seleccionada");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // Captura de lector HID externo
   useHIDScanner({ onScan: handleScan });
@@ -137,6 +173,18 @@ export function Scanner() {
     resetScan();
   }
 
+  async function handleReintegroConfirm(origenLogId: number, cantidad: number, observaciones: string) {
+    if (!scannedAsset) return;
+    await assetsApi.reintegrar(scannedAsset.id, {
+      origen_log_id: origenLogId,
+      cantidad,
+      observaciones: observaciones || undefined,
+    });
+    setModal(null);
+    showFeedback("success", `${cantidad} reintegrado${cantidad !== 1 ? "s" : ""} al stock`);
+    resetScan();
+  }
+
   async function handleMermaConfirm(cantidad: number, observaciones: string) {
     if (!scannedAsset) return;
     await assetsApi.reportShrinkage(scannedAsset.id, { cantidad, observaciones: observaciones || undefined });
@@ -145,7 +193,7 @@ export function Scanner() {
     resetScan();
   }
 
-  function handleAction(type: "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "merma" | "repair_done") {
+  function handleAction(type: "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "merma" | "reintegro" | "repair_done") {
     if (type === "unavailable") return;
     if (type === "repair_done") { handleRepairDone(); return; }
     setModal(type);
@@ -237,6 +285,7 @@ export function Scanner() {
             asset={scannedAsset}
             kitChildren={kitChildren}
             activeLoan={activeLoan}
+            tieneDespachosPendientes={despachos.length > 0}
             onAction={handleAction}
           />
         </div>
@@ -269,6 +318,14 @@ export function Scanner() {
       </div>
 
       {/* Modales */}
+      {candidatos.length > 0 && (
+        <CandidatosModal
+          codigoFabricante={codigoFabricante}
+          candidatos={candidatos}
+          onSelect={handleCandidatoSelect}
+          onClose={resetScan}
+        />
+      )}
       {modal === "return" && activeLoan && (
         <ReturnModal
           activeLoan={activeLoan}
@@ -295,6 +352,14 @@ export function Scanner() {
         <LossModal
           asset={scannedAsset}
           onConfirm={handleLossConfirm}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal === "reintegro" && scannedAsset && (
+        <ReintegroModal
+          asset={scannedAsset}
+          despachos={despachos}
+          onConfirm={handleReintegroConfirm}
           onClose={() => setModal(null)}
         />
       )}

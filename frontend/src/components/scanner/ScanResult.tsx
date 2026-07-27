@@ -1,13 +1,16 @@
-import { Package, Layers, ArrowLeftRight, RotateCcw, AlertTriangle, User, FolderOpen, Trash2, CheckCircle2 } from "lucide-react";
+import { Package, Layers, ArrowLeftRight, RotateCcw, AlertTriangle, User, FolderOpen, Trash2, CheckCircle2, MapPin, Undo2 } from "lucide-react";
 import type { Asset, Loan } from "../../types";
 import { familyColor } from "../../utils/familyColors";
+import { empaquesDeAsset, formatStock } from "../../utils/cantidad";
 
-type ActionType = "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "merma" | "repair_done";
+type ActionType = "loan" | "return" | "consumable" | "kit" | "unavailable" | "loss" | "merma" | "reintegro" | "repair_done";
 
 interface Props {
   asset: Asset;
   kitChildren?: Asset[];
   activeLoan: Loan | null;
+  /** Hay material despachado sin devolver: habilita el reintegro. */
+  tieneDespachosPendientes?: boolean;
   onAction: (type: ActionType) => void;
 }
 
@@ -18,7 +21,7 @@ const STATE_LABELS: Record<number, { label: string; color: string }> = {
   4: { label: "Robado", color: "text-red-400 bg-red-900/30 border-red-800" },
 };
 
-export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Props) {
+export function ScanResult({ asset, kitChildren = [], activeLoan, tieneDespachosPendientes = false, onAction }: Props) {
   const isKit = kitChildren.length > 0;
   const isConsumable = asset.family.comportamiento === "consumible";
   const isAvailable = asset.estado_id === 1;
@@ -64,19 +67,40 @@ export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Pr
                 <p className="text-base font-semibold text-white truncate">{asset.nombre}</p>
               )}
               <p className="font-mono text-sm text-gray-400 truncate">{asset.uid_fisico}</p>
+              {asset.codigo_fabricante && (
+                <p className="font-mono text-xs text-gray-600 truncate mt-0.5">
+                  Fábrica: {asset.codigo_fabricante}
+                </p>
+              )}
             </div>
           </div>
+
+          {/* Ubicación en bodega — para ir a buscarlo sin abrir otra pantalla */}
+          {asset.ubicacion && (
+            <div className="flex items-center gap-2 bg-gray-700/50 rounded-xl px-4 py-3">
+              <MapPin size={16} className="text-gray-400 flex-shrink-0" />
+              <span className="text-sm text-white font-medium truncate">
+                Rack {asset.ubicacion.rack} · Nivel {asset.ubicacion.nivel} · Pos {asset.ubicacion.posicion}
+              </span>
+            </div>
+          )}
 
           {/* Stock (solo consumibles) */}
           {isConsumable && (
             <div className={`flex items-center justify-between rounded-xl px-4 py-3 ${lowStock ? "bg-yellow-900/30 border border-yellow-800" : "bg-gray-700/50"}`}>
-              <div className="flex items-center gap-2">
-                {lowStock && <AlertTriangle size={16} className="text-yellow-400" />}
+              <div className="flex items-center gap-2 min-w-0">
+                {lowStock && <AlertTriangle size={16} className="text-yellow-400 flex-shrink-0" />}
                 <span className="text-sm text-gray-300">Stock actual</span>
               </div>
-              <span className={`text-2xl font-bold ${lowStock ? "text-yellow-400" : "text-green-400"}`}>
-                {asset.stock_actual}
-              </span>
+              <div className="text-right min-w-0">
+                <span className={`text-2xl font-bold ${lowStock ? "text-yellow-400" : "text-green-400"}`}>
+                  {formatStock(asset.stock_actual, asset.unidad)}
+                </span>
+                {/* Equivalente en empaques: se compra en cajas, se despacha en unidades */}
+                {empaquesDeAsset(asset) && (
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{empaquesDeAsset(asset)}</p>
+                )}
+              </div>
             </div>
           )}
 
@@ -155,6 +179,17 @@ export function ScanResult({ asset, kitChildren = [], activeLoan, onAction }: Pr
           </button>
         )}
       </div>
+
+      {/* Reintegro: sólo si hay material despachado sin devolver */}
+      {isConsumable && tieneDespachosPendientes && (
+        <button
+          onClick={() => onAction("reintegro")}
+          className="w-full flex items-center justify-center gap-2 bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800 text-cyan-300 text-sm font-semibold rounded-xl py-3 min-h-[48px] transition-colors"
+        >
+          <Undo2 size={16} />
+          Reintegrar sobrante
+        </button>
+      )}
     </div>
   );
 }

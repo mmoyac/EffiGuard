@@ -1,0 +1,47 @@
+schema: spec-driven
+
+context: |
+  # EffiGuard
+
+  SaaS multi-tenant de gestión de activos, control de bodega y prevención de robos.
+  Uso industrial: fábricas y obras. Operado con guantes desde teléfonos y tablets.
+  Aún NO está en producción con usuarios reales.
+
+  ## Stack
+
+  - Backend: FastAPI (Python 3.11), SQLAlchemy 2.0 async, asyncpg, PostgreSQL, Alembic.
+  - Frontend: React 18 + Vite + TypeScript, Tailwind CSS, React Query, Zustand, Lucide React.
+  - Infra: Docker Compose (postgres, backend, frontend). PWA con vite-plugin-pwa.
+  - Integraciones: n8n (webhook de chat + consultas vía API key).
+
+  ## Arquitectura backend
+
+  - Capas: `api/v1/` (routers) → `services/` (reglas de negocio) → `repositories/` (persistencia) → `models/`.
+  - `BaseRepository[T]` recibe `tenant_id` e inyecta el filtro multi-tenant en TODA query.
+    Nunca escribir queries de negocio que omitan `tenant_id`.
+  - Dependencias reutilizables en `core/dependencies.py`: `CurrentToken`, `DBSession`, `ApiKeyTenant`.
+    Las de Super Admin viven en `core/superadmin.py`: `SuperAdminToken`, `ActingTenantId`.
+  - Schemas Pydantic v2 en `schemas/`. Los muy simples se declaran inline en el router.
+  - Migraciones Alembic numeradas (`001_…`, `002_…`) en `backend/alembic/versions/`.
+    Todo cambio de modelo requiere su migración.
+
+  ## Convenciones de dominio
+
+  - El dominio se nombra en español (`nombre`, `estado_id`, `fecha_entrega`, `bodeguero_id`).
+    Mantener ese idioma en modelos, campos y mensajes de error al usuario.
+  - IDs estables usados por la lógica: estados 1 Disponible, 2 En Terreno, 3 En Reparación, 4 Robado.
+    Roles: 1 super_admin, 2 admin, 3 bodeguero, 4 operario.
+  - El comportamiento de un activo (prestable vs consumible) viene de su familia
+    (`asset_families.comportamiento`), NO de un campo propio del activo.
+
+  ## Reglas de UI (obligatorias)
+
+  - Modo oscuro forzado. Botones táctiles de mínimo 48px de alto.
+  - Mobile-first desde 320px. Sin scroll horizontal en ninguna vista.
+    Tablas → tarjetas en móvil; `overflow-x-auto` sólo como último recurso.
+  - El menú lateral NO se hardcodea: se construye desde `GET /api/v1/menu` según el rol.
+
+  ## Despliegue
+
+  - Un subdominio por tenant: `https://effiguard-{slug}.effi4tech.cl`, con SSL wildcard `*.effi4tech.cl`.
+  - El slug del subdominio resuelve el tenant en el login.

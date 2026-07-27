@@ -70,8 +70,16 @@ export const assetsApi = {
     return api.get(`/assets?${params}`);
   },
   getById: (id: number) => api.get(`/assets/${id}`),
-  scan: (uid: string) => api.get(`/assets/scan/${uid}`),
+  /** Devuelve un sobre de resolución: puede traer una unidad o varias candidatas. */
+  scan: (codigo: string) => api.get(`/assets/scan/${encodeURIComponent(codigo)}`),
   lowStock: () => api.get("/assets/low-stock"),
+  // Código de fabricante — flujo de compra
+  productoPreview: (codigo: string) => api.get(`/assets/producto/${encodeURIComponent(codigo)}`),
+  crearPorCodigo: (codigo_fabricante: string, cantidad: number) =>
+    api.post("/assets/from-codigo-fabricante", { codigo_fabricante, cantidad }),
+  // Reintegro de sobrantes
+  despachosPendientes: (id: number) => api.get(`/assets/${id}/despachos-pendientes`),
+  reintegrar: (id: number, data: object) => api.post(`/assets/${id}/reintegro`, data),
   update: (id: number, data: object) => api.patch(`/assets/${id}`, data),
   reportLoss: (id: number, data: object) => api.post(`/assets/${id}/loss`, data),
   adjustStock: (id: number, data: object) => api.post(`/assets/${id}/adjust`, data),
@@ -105,6 +113,17 @@ export const usersApi = {
 
 export const projectsApi = {
   list: () => api.get("/projects"),
+};
+
+export const ubicacionesApi = {
+  list: () => api.get("/ubicaciones"),
+  racks: () => api.get("/ubicaciones/racks"),
+  niveles: (rack: string) => api.get(`/ubicaciones/niveles?rack=${encodeURIComponent(rack)}`),
+  posiciones: (rack: string, nivel: string) =>
+    api.get(`/ubicaciones/posiciones?rack=${encodeURIComponent(rack)}&nivel=${encodeURIComponent(nivel)}`),
+  create: (d: object) => api.post("/ubicaciones", d),
+  update: (id: number, d: object) => api.patch(`/ubicaciones/${id}`, d),
+  remove: (id: number) => api.delete(`/ubicaciones/${id}`),
 };
 
 export const catalogApi = {

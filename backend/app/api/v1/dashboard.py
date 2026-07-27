@@ -10,7 +10,9 @@ from app.models.asset_family import AssetFamily
 from app.models.asset_state import AssetState
 from app.models.inventory_log import InventoryLog
 from app.models.loan import Loan
+from app.models.ubicacion import Ubicacion
 from app.models.user import User
+from app.schemas.inventory import CostoProyectoResponse
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -104,9 +106,11 @@ async def inventory_last_days(token: CurrentToken, session: DBSession, days: int
     result = {}
     for i in range(days):
         d = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
-        result[d] = 0
+        result[d] = 0.0
     for r in rows:
-        result[str(r.dia)] = int(r.cantidad or 0)
+        # float y no int: hay consumibles que se miden (12,5 m) y truncar
+        # los haría desaparecer del gráfico
+        result[str(r.dia)] = float(r.cantidad or 0)
 
     return [{"dia": k, "cantidad": v} for k, v in result.items()]
 
@@ -121,10 +125,15 @@ async def low_stock_detail(token: CurrentToken, session: DBSession):
             Asset.nombre,
             Asset.stock_actual,
             Asset.stock_minimo,
+            Asset.unidad,
             AssetFamily.nombre.label("family_nombre"),
             AssetFamily.color.label("family_color"),
+            Ubicacion.rack.label("ubicacion_rack"),
+            Ubicacion.nivel.label("ubicacion_nivel"),
+            Ubicacion.posicion.label("ubicacion_posicion"),
         )
         .join(AssetFamily, Asset.family_id == AssetFamily.id)
+        .outerjoin(Ubicacion, Asset.ubicacion_id == Ubicacion.id)
         .where(Asset.tenant_id == token.tenant_id)
         .where(AssetFamily.comportamiento == "consumible")
         .where(Asset.stock_actual <= Asset.stock_minimo)
@@ -136,13 +145,34 @@ async def low_stock_detail(token: CurrentToken, session: DBSession):
             "id": r.id,
             "uid_fisico": r.uid_fisico,
             "nombre": r.nombre,
-            "stock_actual": r.stock_actual,
-            "stock_minimo": r.stock_minimo,
+            "stock_actual": float(r.stock_actual),
+            "stock_minimo": float(r.stock_minimo),
+            "unidad": r.unidad,
             "family_nombre": r.family_nombre,
             "family_color": r.family_color,
+            # Dónde reponer, para no tener que abrir la ficha del activo
+            "ubicacion_rack": r.ubicacion_rack,
+            "ubicacion_nivel": r.ubicacion_nivel,
+            "ubicacion_posicion": r.ubicacion_posicion,
         }
         for r in rows
     ]
+
+
+@router.get("/costo-materiales-por-proyecto", response_model=list[CostoProyectoResponse])
+async def costo_materiales_por_proyecto(
+    token: CurrentToken, session: DBSession, solo_activos: bool = True
+):
+    """Gasto en materiales acumulado por proyecto, mayor primero.
+
+    Es costo de MATERIALES, no del proyecto: no incluye mano de obra ni uso de
+    herramientas. La interfaz debe titularlo así para no sugerir una completitud
+    que no tiene.
+    """
+    from app.repositories.inventory_log import InventoryLogRepository
+
+    repo = InventoryLogRepository(session, token.tenant_id)
+    return await repo.costo_materiales_por_proyecto(solo_activos=solo_activos)
 
 
 @router.get("/overdue-loans")

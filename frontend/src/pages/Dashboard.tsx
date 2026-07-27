@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { useQuery } from "react-query";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { Package, ArrowLeftRight, AlertTriangle, TrendingUp, Clock } from "lucide-react";
+import { Package, ArrowLeftRight, AlertTriangle, TrendingUp, Clock, Wallet, ChevronDown, ChevronUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { familyColor } from "../utils/familyColors";
@@ -46,7 +47,22 @@ const dashApi = {
   inventoryDays: () => api.get("/dashboard/inventory-last-days?days=30").then((r: { data: { dia: string; cantidad: number }[] }) => r.data),
   lowStockDetail: () => api.get("/dashboard/low-stock-detail").then((r: { data: LowStockItem[] }) => r.data),
   overdueLoans:   () => api.get("/dashboard/overdue-loans").then((r: { data: OverdueLoan[] }) => r.data),
+  costoProyectos: () => api.get("/dashboard/costo-materiales-por-proyecto").then((r: { data: CostoProyecto[] }) => r.data),
 };
+
+/** Costo de MATERIALES de un proyecto. No incluye mano de obra ni herramientas. */
+interface CostoProyecto {
+  project_id: number;
+  proyecto_nombre: string;
+  consumo: number;
+  perdidas: number;
+  mermas: number;
+  total: number;
+  movimientos_sin_valorizar: number;
+}
+
+const money = (v: number) =>
+  `$${Math.round(Number(v)).toLocaleString("es-CL")}`;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function shortDate(iso: string) {
@@ -103,6 +119,8 @@ export function Dashboard() {
   const { data: invData = [] } = useQuery("dash-inventory", dashApi.inventoryDays);
   const { data: lowStockItems = [] } = useQuery<LowStockItem[]>("dash-low-stock", dashApi.lowStockDetail, { refetchInterval: 60000 });
   const { data: overdueItems = [] } = useQuery<OverdueLoan[]>("dash-overdue", dashApi.overdueLoans, { refetchInterval: 60000 });
+  const { data: costoProyectos = [] } = useQuery<CostoProyecto[]>("dash-costos", dashApi.costoProyectos, { refetchInterval: 60000 });
+  const [expandido, setExpandido] = useState<number | null>(null);
 
   // Inyectar color en los datos del donut para no necesitar <Cell>
   const byState = byStateRaw.map((d, i) => ({
@@ -241,6 +259,68 @@ export function Dashboard() {
             </div>
           )}
         </div>
+
+        {/* Gasto en materiales por obra activa */}
+        {costoProyectos.length > 0 && (
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Wallet size={16} className="text-emerald-400" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-300">Gasto en materiales</p>
+                {/* No es el costo del proyecto: no incluye mano de obra ni herramientas */}
+                <p className="text-xs text-gray-500">Obras activas · sólo materiales</p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              {costoProyectos.map((p) => {
+                const abierto = expandido === p.project_id;
+                return (
+                  <div key={p.project_id} className="bg-gray-700/50 border border-gray-600 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setExpandido(abierto ? null : p.project_id)}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-gray-700 transition-colors min-h-[48px] text-left"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{p.proyecto_nombre}</p>
+                        {p.movimientos_sin_valorizar > 0 && (
+                          <p className="text-xs text-amber-400/90 truncate">
+                            {p.movimientos_sin_valorizar} sin valorizar
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-sm font-bold text-emerald-400 flex-shrink-0">{money(p.total)}</span>
+                      {abierto ? <ChevronUp size={15} className="text-gray-500 flex-shrink-0" />
+                               : <ChevronDown size={15} className="text-gray-500 flex-shrink-0" />}
+                    </button>
+
+                    {/* Tres líneas separadas: la pérdida diluida en el consumo deja de verse */}
+                    {abierto && (
+                      <div className="px-3 pb-3 pt-1 space-y-1 border-t border-gray-600/60 text-xs">
+                        <p className="flex justify-between gap-2">
+                          <span className="text-gray-400">Consumo</span>
+                          <span className="text-gray-200">{money(p.consumo)}</span>
+                        </p>
+                        <p className="flex justify-between gap-2">
+                          <span className="text-red-400/90">Pérdidas</span>
+                          <span className={p.perdidas > 0 ? "text-red-400 font-semibold" : "text-gray-200"}>
+                            {money(p.perdidas)}
+                          </span>
+                        </p>
+                        <p className="flex justify-between gap-2">
+                          <span className="text-amber-400/90">Mermas</span>
+                          <span className={p.mermas > 0 ? "text-amber-400" : "text-gray-200"}>
+                            {money(p.mermas)}
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Préstamos vencidos */}
         <div className="bg-gray-800 border border-gray-700 rounded-2xl p-4 space-y-3">

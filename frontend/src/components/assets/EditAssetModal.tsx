@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Settings2, X, Package } from "lucide-react";
 import { assetsApi } from "../../services/api";
-import type { Asset } from "../../types";
+import type { Asset, UnidadMedida } from "../../types";
+import { UbicacionPicker } from "./UbicacionPicker";
 
 interface State { id: number; nombre: string; }
 interface AssetModel { id: number; brand_id: number; nombre: string; }
@@ -25,7 +26,19 @@ export function EditAssetModal({ asset, states, models, brands, onSaved, onClose
     stock_minimo: asset.stock_minimo,
     valor_reposicion: asset.valor_reposicion ? String(asset.valor_reposicion) : "",
     proxima_mantencion: asset.proxima_mantencion ?? "",
+    codigo_fabricante: asset.codigo_fabricante ?? "",
+    unidad: asset.unidad ?? "unidad",
+    contenido_por_empaque: asset.contenido_por_empaque ? String(asset.contenido_por_empaque) : "",
+    nombre_empaque: asset.nombre_empaque ?? "",
+    precio_compra: asset.precio_compra ? String(asset.precio_compra) : "",
   });
+  const [ubicacionId, setUbicacionId] = useState<number | null>(asset.ubicacion_id);
+  // Derivado: no se guarda el precio del empaque, se calcula desde el unitario
+  const [precioEmpaque, setPrecioEmpaque] = useState(
+    asset.precio_compra && asset.contenido_por_empaque
+      ? String(Number(asset.precio_compra) * Number(asset.contenido_por_empaque))
+      : ""
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -48,6 +61,17 @@ export function EditAssetModal({ asset, states, models, brands, onSaved, onClose
         stock_minimo: Number(form.stock_minimo),
         valor_reposicion: form.valor_reposicion ? Number(form.valor_reposicion) : null,
         proxima_mantencion: form.proxima_mantencion || null,
+        ubicacion_id: ubicacionId,
+        codigo_fabricante: form.codigo_fabricante.trim() || null,
+        // El empaque sólo aplica a consumibles: en una herramienta no significa nada
+        ...(isConsumable
+          ? {
+              unidad: form.unidad,
+              contenido_por_empaque: form.contenido_por_empaque ? Number(form.contenido_por_empaque) : null,
+              nombre_empaque: form.nombre_empaque.trim() || null,
+              precio_compra: form.precio_compra ? Number(form.precio_compra) : null,
+            }
+          : {}),
       });
       onSaved();
     } catch (err: any) {
@@ -150,15 +174,106 @@ export function EditAssetModal({ asset, states, models, brands, onSaved, onClose
             </select>
           </div>
 
-          {/* Consumible: stock mínimo */}
+          {/* Ubicación en bodega */}
+          <UbicacionPicker actual={asset.ubicacion} value={ubicacionId} onChange={setUbicacionId} />
+
+          {/* Código de barras del fabricante */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-300">
+              Código de fabricante <span className="text-gray-500 font-normal">(opcional)</span>
+            </label>
+            <p className="text-xs text-gray-500">
+              EAN/UPC de la caja. Identifica el producto, no esta unidad: las unidades iguales lo comparten.
+            </p>
+            <input placeholder="7891234567890" value={form.codigo_fabricante}
+              onChange={(e) => setForm({ ...form, codigo_fabricante: e.target.value })}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white font-mono placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+          </div>
+
+          {/* Consumible: unidad, stock mínimo y empaque */}
           {isConsumable && (
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-300">Cantidad mínima</label>
-              <p className="text-xs text-gray-500">Alerta de stock bajo si cae por debajo de este número</p>
-              <input type="number" min={0} value={form.stock_minimo}
-                onChange={(e) => setForm({ ...form, stock_minimo: Number(e.target.value) })}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
-            </div>
+            <>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-300">Unidad de medida</label>
+                <p className="text-xs text-gray-500">En qué se despacha: la unidad en que vive el stock</p>
+                <select value={form.unidad}
+                  onChange={(e) => setForm({ ...form, unidad: e.target.value as UnidadMedida })}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                  <option value="unidad">Unidad (tornillos, guantes)</option>
+                  <option value="metro">Metro (cable, luces LED)</option>
+                  <option value="kilo">Kilo</option>
+                  <option value="litro">Litro</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-300">Cantidad mínima</label>
+                <p className="text-xs text-gray-500">Alerta de stock bajo si cae por debajo de este número</p>
+                <input type="number" min={0} value={form.stock_minimo}
+                  onChange={(e) => setForm({ ...form, stock_minimo: Number(e.target.value) })}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
+              </div>
+
+              {/* Empaque de compra: se compra en cajas, se despacha en unidades */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-300">
+                  Empaque de compra <span className="text-gray-500 font-normal">(opcional)</span>
+                </label>
+                <p className="text-xs text-gray-500">
+                  Si compras por caja o rollo, la compra se ingresa en empaques y el stock sube en unidades.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" min={0} step="any" placeholder="Contenido (100)"
+                    value={form.contenido_por_empaque}
+                    onChange={(e) => setForm({ ...form, contenido_por_empaque: e.target.value })}
+                    className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
+                  <input placeholder="Nombre (caja)" value={form.nombre_empaque}
+                    onChange={(e) => setForm({ ...form, nombre_empaque: e.target.value })}
+                    className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
+                </div>
+                {Number(form.contenido_por_empaque) > 0 && (
+                  <p className="text-xs text-green-400 pt-1">
+                    1 {form.nombre_empaque.trim() || "empaque"} = {form.contenido_por_empaque} {form.unidad}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-300">
+                  Precio de compra <span className="text-gray-500 font-normal">(opcional)</span>
+                </label>
+                <p className="text-xs text-gray-500">
+                  Costo de UNA {form.unidad}. Valoriza el consumo del proyecto.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" min={0} step="any" placeholder="Precio unitario"
+                    value={form.precio_compra}
+                    onChange={(e) => {
+                      setForm({ ...form, precio_compra: e.target.value });
+                      const cont = Number(form.contenido_por_empaque);
+                      setPrecioEmpaque(cont > 0 && e.target.value ? String(Number(e.target.value) * cont) : "");
+                    }}
+                    className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full" />
+                  <input type="number" min={0} step="any" placeholder={`Precio por ${form.nombre_empaque.trim() || "empaque"}`}
+                    value={precioEmpaque}
+                    onChange={(e) => {
+                      setPrecioEmpaque(e.target.value);
+                      const cont = Number(form.contenido_por_empaque);
+                      if (cont > 0 && e.target.value) {
+                        setForm((f) => ({ ...f, precio_compra: String(Number(e.target.value) / cont) }));
+                      }
+                    }}
+                    disabled={!(Number(form.contenido_por_empaque) > 0)}
+                    className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full disabled:opacity-40" />
+                </div>
+                {Number(form.precio_compra) > 0 && (
+                  <p className="text-xs text-green-400 pt-1">
+                    {Number(form.precio_compra).toLocaleString("es-CL", { maximumFractionDigits: 4 })} por {form.unidad}
+                  </p>
+                )}
+              </div>
+
+            </>
           )}
 
           {/* Valor reposición */}
