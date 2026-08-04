@@ -38,6 +38,17 @@ services:
     image: mmoyac/effiguard-backend:latest
     container_name: effiguard_backend
     restart: unless-stopped
+    # Las migraciones corren al arrancar, no las ejecuta nadie más. El workflow de
+    # despliegue asumía que ocurrían solas y sólo consultaba `alembic current`, que
+    # informa la revisión pero no aplica nada: el backend levantaba con código nuevo
+    # contra un esquema viejo y la app quedaba arriba y rota, que es peor que caída.
+    #
+    # Si una migración falla, el contenedor no arranca y el chequeo de `docker ps`
+    # del workflow marca el deploy como fallido. Es el comportamiento correcto:
+    # mejor un despliegue detenido que una base a medio migrar.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
     depends_on:
       postgres:
         condition: service_healthy

@@ -125,7 +125,7 @@ jobs:
             echo "Reiniciando servicios actualizados..."
             docker compose up -d --force-recreate backend frontend backup
 
-            echo "Esperando que el backend levante y ejecute migraciones..."
+            echo "Esperando que el backend levante y aplique migraciones..."
             sleep 15
 
             if docker ps | grep -q effiguard_backend && docker ps | grep -q effiguard_frontend; then
@@ -137,7 +137,9 @@ jobs:
               exit 1
             fi
 
-            echo "Verificando estado de migraciones..."
+            # `alembic current` sólo informa la revisión; quien aplica las
+            # migraciones es el `command` del backend en docker-compose.prod.yml.
+            echo "Revision de base de datos aplicada:"
             docker exec effiguard_backend alembic current
 
             echo "Limpiando imagenes antiguas..."
