@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class LoanCreate(BaseModel):
-    asset_id: int
+    unidad_id: int        # El ejemplar concreto que se lleva
     user_id: int          # Operario que recibe
     project_id: int | None = None
     fecha_devolucion_prevista: datetime | None = None
@@ -19,7 +19,7 @@ class LoanReturn(BaseModel):
 class LoanResponse(BaseModel):
     id: int
     tenant_id: int
-    asset_id: int
+    unidad_id: int
     user_id: int
     bodeguero_id: int
     project_id: int | None

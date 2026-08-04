@@ -24,4 +24,4 @@ class Ubicacion(Base):
     descripcion: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     tenant: Mapped["Tenant"] = relationship()
-    assets: Mapped[list["Asset"]] = relationship(back_populates="ubicacion")
+    variantes: Mapped[list["Variante"]] = relationship(back_populates="ubicacion")

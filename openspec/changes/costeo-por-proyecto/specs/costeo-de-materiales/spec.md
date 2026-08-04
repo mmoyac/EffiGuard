@@ -138,6 +138,48 @@ El dashboard SHALL mostrar el gasto en materiales acumulado a la fecha de cada p
 - **WHEN** se abre un proyecto del panel
 - **THEN** se muestran sus tres líneas —consumo, pérdidas y mermas— sin necesidad de salir del dashboard
 
+### Requirement: La reaparición de una herramienta descuenta su pérdida
+
+Un movimiento de `reingreso` SHALL restarse de la línea de pérdidas del proyecto al que se le había imputado, valorizado al mismo costo con que se descontó.
+
+Sin esa resta la obra seguiría cargando el costo de una herramienta que está de vuelta en la repisa, y el total del panel dejaría de ser la plata que realmente se perdió.
+
+#### Scenario: Herramienta perdida que aparece
+
+- **WHEN** una obra registró la pérdida de una herramienta de $145.000 y después el ejemplar reaparece
+- **THEN** su línea de pérdidas vuelve a $0, sin que la pérdida ni el reingreso desaparezcan de la bitácora
+
+#### Scenario: Costo simétrico
+
+- **WHEN** el valor de reposición del producto cambió entre la pérdida y la reaparición
+- **THEN** el reingreso usa el costo congelado en la pérdida, para que la resta cuadre con la suma y la obra no quede con un saldo fantasma
+
+### Requirement: Detalle de materiales consumidos por la obra
+
+Al abrir un proyecto del panel, el dashboard SHALL listar además **qué** materiales consumió, con su cantidad neta y su costo, ordenados por costo descendente.
+
+La cantidad SHALL ser neta de reintegros: si salieron 100 y volvieron 20, la obra ocupó 80. El total responde *cuánto* gastó la obra; este detalle responde *en qué*, que es lo que permite decidir — el mismo monto significa cosas distintas si se fue en un consumible barato que en uno caro.
+
+#### Scenario: Obra con varios materiales
+
+- **WHEN** una obra consumió dos consumibles distintos
+- **THEN** ambos se listan con su nombre, cantidad neta, unidad y costo, con el más caro primero
+
+#### Scenario: Material parcialmente reintegrado
+
+- **WHEN** de un material salieron 400 unidades y volvieron 200
+- **THEN** la cantidad informada es 200, y se indica cuánto salió y cuánto volvió para explicar la diferencia
+
+#### Scenario: Material con pérdidas o mermas en la obra
+
+- **WHEN** un material registró pérdidas o mermas imputadas al proyecto
+- **THEN** esas cantidades se muestran junto a la consumida, sin sumarse a ella
+
+#### Scenario: Carga diferida
+
+- **WHEN** el panel se muestra con los proyectos plegados
+- **THEN** el detalle de materiales no se consulta hasta que se abre un proyecto
+
 #### Scenario: Sin proyectos activos
 
 - **WHEN** el tenant no tiene proyectos activos

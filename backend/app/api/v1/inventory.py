@@ -3,11 +3,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 
 from app.core.dependencies import CurrentToken, DBSession
-from app.models.asset import Asset
 from app.models.asset_family import AssetFamily
+from app.models.codigo import Codigo
 from app.models.inventory_log import InventoryLog
+from app.models.producto import Producto
 from app.models.project import Project
 from app.models.user import User
+from app.models.variante import Variante
 from app.schemas.inventory import InventoryLogResponse
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
@@ -17,14 +19,19 @@ Operario = aliased(User, name="operario")
 
 
 def _log_query(tenant_id: int):
+    """Bitácora sobre el catálogo producto → variante → unidad.
+
+    El código escaneado se muestra en la columna del identificador: es lo que
+    permite auditar una compra contra la factura del proveedor.
+    """
     return (
         select(
             InventoryLog,
             User.nombre.label("user_nombre"),
             Operario.nombre.label("operario_nombre"),
-            Asset.nombre.label("asset_nombre"),
-            Asset.uid_fisico.label("asset_uid"),
-            Asset.unidad.label("asset_unidad"),
+            (Producto.nombre + " · " + Variante.nombre).label("asset_nombre"),
+            Codigo.codigo.label("asset_uid"),
+            Variante.unidad.label("asset_unidad"),
             AssetFamily.comportamiento.label("asset_tipo"),
             AssetFamily.color.label("asset_color"),
             Project.nombre.label("proyecto_nombre"),
@@ -32,8 +39,10 @@ def _log_query(tenant_id: int):
         .join(User, InventoryLog.user_id == User.id)
         .outerjoin(Operario, InventoryLog.operario_id == Operario.id)
         .outerjoin(Project, InventoryLog.project_id == Project.id)
-        .join(Asset, InventoryLog.asset_id == Asset.id)
-        .join(AssetFamily, Asset.family_id == AssetFamily.id)
+        .join(Variante, InventoryLog.variante_id == Variante.id)
+        .join(Producto, Variante.producto_id == Producto.id)
+        .join(AssetFamily, Producto.family_id == AssetFamily.id)
+        .outerjoin(Codigo, InventoryLog.codigo_id == Codigo.id)
         .where(InventoryLog.tenant_id == tenant_id)
         .order_by(InventoryLog.fecha_hora.desc())
     )
@@ -62,9 +71,9 @@ async def list_logs(token: CurrentToken, session: DBSession, skip: int = 0, limi
     return [_to_response(row) for row in result.all()]
 
 
-@router.get("/logs/asset/{asset_id}", response_model=list[InventoryLogResponse])
-async def logs_by_asset(asset_id: int, token: CurrentToken, session: DBSession):
+@router.get("/logs/variante/{variante_id}", response_model=list[InventoryLogResponse])
+async def logs_by_variante(variante_id: int, token: CurrentToken, session: DBSession):
     result = await session.execute(
-        _log_query(token.tenant_id).where(InventoryLog.asset_id == asset_id)
+        _log_query(token.tenant_id).where(InventoryLog.variante_id == variante_id)
     )
     return [_to_response(row) for row in result.all()]

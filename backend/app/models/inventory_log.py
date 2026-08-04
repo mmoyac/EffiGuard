@@ -12,7 +12,19 @@ class InventoryLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
-    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"))
+    # Toda posición de stock que se mueve es una variante, así que el consumo por
+    # proyecto y la valorización se calculan igual para herramientas y consumibles.
+    variante_id: Mapped[int] = mapped_column(ForeignKey("variantes.id"), index=True)
+    # Sólo cuando el movimiento identifica un ejemplar concreto.
+    unidad_id: Mapped[int | None] = mapped_column(ForeignKey("unidades.id"), nullable=True)
+    # Código escaneado en una compra: permite auditar contra la factura del
+    # proveedor (de quién vino y en qué empaque). Borrarlo no invalida el movimiento.
+    codigo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("codigos.id", ondelete="SET NULL"), nullable=True
+    )
+    proveedor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("proveedores.id", ondelete="SET NULL"), nullable=True
+    )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     operario_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
@@ -27,7 +39,8 @@ class InventoryLog(Base):
     fecha_hora: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     observaciones: Mapped[str | None] = mapped_column(Text)
 
-    asset: Mapped["Asset"] = relationship(back_populates="inventory_logs")
+    variante: Mapped["Variante"] = relationship()
+    unidad: Mapped["Unidad | None"] = relationship()
     user: Mapped["User"] = relationship(foreign_keys=[user_id], back_populates="inventory_logs")
     operario: Mapped["User | None"] = relationship(foreign_keys=[operario_id])
 

@@ -4,11 +4,12 @@ from sqlalchemy import case, func, or_ as sa_or, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.models.asset import Asset
 from app.models.asset_family import AssetFamily
 from app.models.inventory_log import InventoryLog
+from app.models.producto import Producto
 from app.models.project import Project
 from app.models.user import User
+from app.models.variante import Variante
 from app.repositories.base import BaseRepository
 
 
@@ -23,22 +24,23 @@ class InventoryLogRepository(BaseRepository[InventoryLog]):
         movimiento creados desde media docena de funciones, y basta que una olvide
         el costo para que un proyecto quede mal costeado sin que nadie lo note.
         """
-        if "costo_unitario" not in kwargs and kwargs.get("asset_id"):
+        if "costo_unitario" not in kwargs and kwargs.get("variante_id"):
             precio = (
                 await self.session.execute(
-                    select(Asset.precio_compra)
-                    .where(Asset.id == kwargs["asset_id"])
-                    .where(Asset.tenant_id == self.tenant_id)
+                    select(Variante.precio_compra)
+                    .where(Variante.id == kwargs["variante_id"])
+                    .where(Variante.tenant_id == self.tenant_id)
                 )
             ).scalar_one_or_none()
             # None si el activo no tiene precio: queda sin valorizar, no en cero
             kwargs["costo_unitario"] = precio
         return await super().create(**kwargs)
 
-    async def list_by_asset(self, asset_id: int) -> list[InventoryLog]:
+    async def list_by_unidad(self, unidad_id: int) -> list[InventoryLog]:
+        """Historial de un ejemplar concreto: préstamos, reparaciones, pérdida."""
         result = await self.session.execute(
             self._base_query()
-            .where(InventoryLog.asset_id == asset_id)
+            .where(InventoryLog.unidad_id == unidad_id)
             .order_by(InventoryLog.fecha_hora.desc())
         )
         return list(result.scalars().all())
@@ -92,14 +94,16 @@ class InventoryLogRepository(BaseRepository[InventoryLog]):
         )
         return result.scalar_one() > 0
 
-    async def despachos_abiertos(self, asset_id: int) -> list[dict]:
-        """Despachos de un consumible que todavía admiten reintegro.
+    async def despachos_abiertos_variante(self, variante_id: int) -> list[dict]:
+        """Despachos de una variante que todavía admiten reintegro.
 
-        Un despacho está abierto mientras no tenga reintegro y su proyecto siga
-        activo. El estado se deriva: no hay columna de cierre, porque el cierre no
-        afecta la aritmética del consumo (siempre entregas − reintegros), sólo
-        determina qué se ofrece para reintegrar.
+        Comparte el cuerpo con la versión sobre `assets`: sólo cambia por qué
+        columna se filtra, y duplicar la consulta entera sería duplicar también
+        las tres reglas de "abierto".
         """
+        return await self._despachos_abiertos(InventoryLog.variante_id == variante_id)
+
+    async def _despachos_abiertos(self, filtro) -> list[dict]:
         sub = self._reintegrado_subq()
         Operario = aliased(User, name="operario")
 
@@ -121,7 +125,7 @@ class InventoryLogRepository(BaseRepository[InventoryLog]):
                 .outerjoin(Operario, InventoryLog.operario_id == Operario.id)
                 .outerjoin(Project, InventoryLog.project_id == Project.id)
                 .where(InventoryLog.tenant_id == self.tenant_id)
-                .where(InventoryLog.asset_id == asset_id)
+                .where(filtro)
                 .where(InventoryLog.tipo_movimiento == "entrega")
                 # Un solo reintegro por despacho: si ya tiene uno, está cerrado
                 .where(sub.c.origen_id.is_(None))
@@ -158,16 +162,18 @@ class InventoryLogRepository(BaseRepository[InventoryLog]):
         congelado, que es el dinero ya gastado en ellas.
         """
         costo_mov = InventoryLog.cantidad * InventoryLog.costo_unitario
+
         es_prestable = AssetFamily.comportamiento == "prestable"
+        reposicion = Variante.valor_reposicion
 
         # Una herramienta perdida se valoriza a reposición; el resto, al congelado
         costo_perdida = case(
-            (es_prestable, Asset.valor_reposicion),
+            (es_prestable, reposicion),
             else_=costo_mov,
         )
         # Y por lo mismo, "valorizado" significa cosas distintas según el caso
         perdida_valorizada = case(
-            (es_prestable, Asset.valor_reposicion.is_not(None)),
+            (es_prestable, reposicion.is_not(None)),
             else_=InventoryLog.costo_unitario.is_not(None),
         )
 
@@ -175,9 +181,14 @@ class InventoryLogRepository(BaseRepository[InventoryLog]):
             return func.coalesce(func.sum(expr).filter(InventoryLog.tipo_movimiento == tipo), 0)
 
         def sin_valorizar(tipos: tuple[str, ...]):
+            # Sólo consumibles: prestar una herramienta a una obra no le imputa
+            # material, así que su entrega no tiene costo que estampar y contarla
+            # como "sin valorizar" inflaría la advertencia con movimientos que
+            # nunca debieron llevar precio.
             return func.count().filter(
                 InventoryLog.tipo_movimiento.in_(tipos),
                 InventoryLog.costo_unitario.is_(None),
+                AssetFamily.comportamiento == "consumible",
             )
 
         q = (
@@ -185,8 +196,21 @@ class InventoryLogRepository(BaseRepository[InventoryLog]):
                 Project.id.label("project_id"),
                 Project.nombre.label("proyecto_nombre"),
                 (suma(costo_mov, "entrega") - suma(costo_mov, "reintegro")).label("consumo"),
-                func.coalesce(
-                    func.sum(costo_perdida).filter(InventoryLog.tipo_movimiento == "perdida"), 0
+                # Neto de reingresos: una herramienta que apareció dejó de ser
+                # pérdida, y la obra no debe seguir cargando su costo.
+                (
+                    func.coalesce(
+                        func.sum(costo_perdida).filter(
+                            InventoryLog.tipo_movimiento == "perdida"
+                        ),
+                        0,
+                    )
+                    - func.coalesce(
+                        func.sum(costo_mov).filter(
+                            InventoryLog.tipo_movimiento == "reingreso"
+                        ),
+                        0,
+                    )
                 ).label("perdidas"),
                 suma(costo_mov, "merma").label("mermas"),
                 (
@@ -199,8 +223,9 @@ class InventoryLogRepository(BaseRepository[InventoryLog]):
             )
             .select_from(InventoryLog)
             .join(Project, InventoryLog.project_id == Project.id)
-            .join(Asset, InventoryLog.asset_id == Asset.id)
-            .join(AssetFamily, Asset.family_id == AssetFamily.id)
+            .join(Variante, InventoryLog.variante_id == Variante.id)
+            .join(Producto, Variante.producto_id == Producto.id)
+            .join(AssetFamily, Producto.family_id == AssetFamily.id)
             .where(InventoryLog.tenant_id == self.tenant_id)
             .group_by(Project.id, Project.nombre)
         )
@@ -226,7 +251,77 @@ class InventoryLogRepository(BaseRepository[InventoryLog]):
         resultado.sort(key=lambda x: x["total"], reverse=True)
         return resultado
 
-    async def consumo_por_proyecto(self, asset_id: int | None = None) -> list[dict]:
+    async def materiales_de_proyecto(self, project_id: int) -> list[dict]:
+        """Qué materiales consumió una obra, en cantidad y en plata.
+
+        El total del panel responde *cuánto* gastó la obra; esto responde *en qué*,
+        que es lo que permite decidir. Un gasto alto en un consumible barato es un
+        problema de control; el mismo monto en uno caro puede ser el proyecto normal.
+
+        La cantidad es neta —despachado menos reintegrado—: si salieron 100 y
+        volvieron 20, la obra ocupó 80, no 100.
+        """
+        def suma_cant(tipo: str):
+            return func.coalesce(
+                func.sum(InventoryLog.cantidad).filter(InventoryLog.tipo_movimiento == tipo), 0
+            )
+
+        def suma_costo(tipo: str):
+            return func.coalesce(
+                func.sum(InventoryLog.cantidad * InventoryLog.costo_unitario).filter(
+                    InventoryLog.tipo_movimiento == tipo
+                ),
+                0,
+            )
+
+        entregado, reintegrado = suma_cant("entrega"), suma_cant("reintegro")
+
+        nombre = Producto.nombre + " · " + Variante.nombre
+        unidad = Variante.unidad
+
+        q = (
+            select(
+                InventoryLog.variante_id,
+                nombre.label("nombre"),
+                unidad.label("unidad"),
+                (entregado - reintegrado).label("cantidad"),
+                entregado.label("despachado"),
+                reintegrado.label("reintegrado"),
+                suma_cant("merma").label("merma"),
+                suma_cant("perdida").label("perdida"),
+                (suma_costo("entrega") - suma_costo("reintegro")).label("costo_consumo"),
+                (suma_costo("merma") + suma_costo("perdida")).label("costo_perdido"),
+            )
+            .select_from(InventoryLog)
+            .join(Variante, InventoryLog.variante_id == Variante.id)
+            .join(Producto, Variante.producto_id == Producto.id)
+            .where(InventoryLog.tenant_id == self.tenant_id)
+            .where(InventoryLog.project_id == project_id)
+            .where(
+                InventoryLog.tipo_movimiento.in_(("entrega", "reintegro", "merma", "perdida"))
+            )
+            .group_by(InventoryLog.variante_id, nombre, unidad)
+        )
+
+        filas = [
+            {
+                "variante_id": r.variante_id,
+                "nombre": r.nombre,
+                "unidad": r.unidad,
+                "cantidad": r.cantidad,
+                "despachado": r.despachado,
+                "reintegrado": r.reintegrado,
+                "merma": r.merma,
+                "perdida": r.perdida,
+                "costo": (r.costo_consumo or 0) + (r.costo_perdido or 0),
+            }
+            for r in (await self.session.execute(q)).all()
+        ]
+        # El más caro primero: es el que justifica mirar
+        filas.sort(key=lambda x: x["costo"], reverse=True)
+        return filas
+
+    async def consumo_por_proyecto(self, variante_id: int | None = None) -> list[dict]:
         """Consumo neto por proyecto: despachado menos reintegrado.
 
         Es distinto de lo retirado: si salieron 100 m y volvieron 20, el proyecto
@@ -252,8 +347,8 @@ class InventoryLogRepository(BaseRepository[InventoryLog]):
             .where(InventoryLog.tipo_movimiento.in_(("entrega", "reintegro")))
             .group_by(InventoryLog.project_id, Project.nombre)
         )
-        if asset_id is not None:
-            q = q.where(InventoryLog.asset_id == asset_id)
+        if variante_id is not None:
+            q = q.where(InventoryLog.variante_id == variante_id)
 
         rows = (await self.session.execute(q)).all()
         return [

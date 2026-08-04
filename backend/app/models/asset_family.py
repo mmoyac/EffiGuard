@@ -15,4 +15,3 @@ class AssetFamily(Base):
     dias_max_prestamo: Mapped[int | None] = mapped_column(Integer, nullable=True)  # None = sin límite
 
     tenant: Mapped["Tenant"] = relationship(back_populates="asset_families")
-    assets: Mapped[list["Asset"]] = relationship(back_populates="family")

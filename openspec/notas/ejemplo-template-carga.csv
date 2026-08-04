@@ -1,0 +1,8 @@
+producto,variante,familia,marca,unidad,stock_actual,stock_minimo,precio_compra,valor_reposicion,dias_max_prestamo,codigos,cantidad_unidades,ubicacion
+Tornillo autoperforante,6x40 zincado,Consumible,,unidad,500,200,12,,,7801234567890:proveedor:1:Sodimac;7809876543210:proveedor:1:Construmart;17801234567890:empaque:100:Sodimac;17809876543210:empaque:250:Construmart,,RACK-A/N2/P3
+Tornillo autoperforante,8x60 zincado,Consumible,,unidad,300,150,18,,,7801234567906:proveedor:1:Sodimac;17801234567906:empaque:100:Sodimac,,RACK-A/N2/P4
+Tornillo autoperforante,6x40 inoxidable,Consumible,,unidad,120,80,34,,,7809876543227:proveedor:1:Construmart,,RACK-A/N2/P5
+Taladro percutor GSB-13RE,,Herramienta,Bosch,unidad,,1,,180000,7,4053423205718:fabricante,3,RACK-C/N1/P1
+Esmeril angular GWS-850,,Herramienta,Bosch,unidad,,1,,145000,7,4059952533445:fabricante;QR-00417:propio,,RACK-C/N1/P2
+Esmeril angular GWS-850,,Herramienta,Bosch,unidad,,1,,145000,7,QR-00418:propio;SN-8842190337:serie_fabrica,,RACK-C/N1/P2
+Esmeril angular GWS-850,,Herramienta,Bosch,unidad,,1,,145000,7,QR-00419:propio,,RACK-D/N3/P1

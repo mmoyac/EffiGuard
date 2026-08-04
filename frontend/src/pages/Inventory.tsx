@@ -19,7 +19,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { familyColor } from "../utils/familyColors";
-import { api, assetsApi } from "../services/api";
+import { api, catalogoApi } from "../services/api";
 import { TenantGuard } from "../components/layout/TenantGuard";
 import type { Asset, InventoryLog } from "../types";
 
@@ -54,9 +54,13 @@ export function Inventory() {
     () => api.get("/inventory/logs").then((r) => r.data)
   );
 
+  // Variantes consumibles del catálogo: el filtro por comportamiento las usa
   const { data: consumables = [] } = useQuery<Asset[]>(
-    ["assets", "consumible"],
-    () => assetsApi.list(0, 200, "consumible").then((r) => r.data),
+    ["variantes", "consumible"],
+    () =>
+      catalogoApi
+        .listVariantes({ comportamiento: "consumible" })
+        .then((r: { data: Asset[] }) => r.data),
     { enabled: filterComportamiento === "consumible" }
   );
 

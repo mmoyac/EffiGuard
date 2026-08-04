@@ -16,6 +16,23 @@ Cantidad = Annotated[
 ]
 
 
+# La unidad va en la variante y no en la familia: una misma familia mezcla cosas
+# que se cuentan (guantes) con cosas que se miden (cinta aisladora).
+UNIDADES_VALIDAS = ("unidad", "metro", "kilo", "litro")
+
+
+class UbicacionNested(BaseModel):
+    """Ubicación embebida en la respuesta, para no exigir otra llamada."""
+
+    id: int
+    rack: str
+    nivel: str
+    posicion: str
+    descripcion: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class MessageResponse(BaseModel):
     message: str
 

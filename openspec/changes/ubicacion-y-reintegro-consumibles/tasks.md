@@ -63,7 +63,7 @@
 
 - [x] 8.1 Agregar los tipos de ubicación y unidad a `types/index.ts` y los métodos del catálogo a `services/api.ts`
 - [x] 8.2 Crear `UbicacionPicker.tsx` con los tres selectores en cascada y la acción "Crear ubicación nueva" inline, con controles de mínimo 48px
-- [ ] 8.3 Crear la pantalla de mantención del catálogo de ubicaciones (listar, crear, editar, eliminar)
+- [x] 8.3 Crear la pantalla de mantención del catálogo de ubicaciones (listar, crear, editar, eliminar)
 - [x] 8.4 Agregar el bloque de ubicación a `ScanResult.tsx`, visible sólo cuando el activo tiene una asignada
 - [x] 8.5 Mostrar el stock con su unidad y decimales en `ScanResult.tsx`
 - [x] 8.6 Integrar `UbicacionPicker` y el selector de unidad en `EditAssetModal.tsx` y `AssetEdit.tsx`

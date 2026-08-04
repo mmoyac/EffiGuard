@@ -5,14 +5,19 @@ import sqlalchemy as sa
 from fastapi import APIRouter
 
 from app.core.dependencies import CurrentToken, DBSession
-from app.models.asset import Asset
 from app.models.asset_family import AssetFamily
 from app.models.asset_state import AssetState
 from app.models.inventory_log import InventoryLog
 from app.models.loan import Loan
-from app.models.ubicacion import Ubicacion
 from app.models.user import User
-from app.schemas.inventory import CostoProyectoResponse
+from app.models.unidad import Unidad
+from app.models.variante import Variante
+from app.repositories.variante import VarianteRepository
+from app.schemas.inventory import (
+    CostoProyectoResponse,
+    MaterialDeProyectoResponse,
+    ValorBodegaResponse,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -22,8 +27,8 @@ async def get_stats(token: CurrentToken, session: DBSession):
     """KPIs rápidos: totales de activos, préstamos activos y stock bajo."""
     tid = token.tenant_id
 
-    total_assets = (await session.execute(
-        sa.select(sa.func.count()).select_from(Asset).where(Asset.tenant_id == tid)
+    total_variantes = (await session.execute(
+        sa.select(sa.func.count()).select_from(Variante).where(Variante.tenant_id == tid)
     )).scalar()
 
     active_loans = (await session.execute(
@@ -32,16 +37,12 @@ async def get_stats(token: CurrentToken, session: DBSession):
         .where(Loan.fecha_devolucion_real.is_(None))
     )).scalar()
 
-    low_stock = (await session.execute(
-        sa.select(sa.func.count()).select_from(Asset)
-        .join(AssetFamily, Asset.family_id == AssetFamily.id)
-        .where(Asset.tenant_id == tid)
-        .where(AssetFamily.comportamiento == "consumible")
-        .where(Asset.stock_actual <= Asset.stock_minimo)
-    )).scalar()
+    # `stock_minimo = 0` desactiva la alerta: si no, todo el catálogo sin mínimo
+    # configurado aparecería como quiebre permanente.
+    low_stock = len(await VarianteRepository(session, tid).bajo_stock())
 
     return {
-        "total_assets": total_assets,
+        "total_assets": total_variantes,
         "active_loans": active_loans,
         "low_stock": low_stock,
     }
@@ -51,9 +52,11 @@ async def get_stats(token: CurrentToken, session: DBSession):
 async def assets_by_state(token: CurrentToken, session: DBSession):
     """Distribución de activos por estado para gráfico donut."""
     rows = (await session.execute(
-        sa.select(AssetState.nombre, sa.func.count(Asset.id).label("count"))
-        .join(Asset, Asset.estado_id == AssetState.id)
-        .where(Asset.tenant_id == token.tenant_id)
+        # Sólo los ejemplares tienen estado: una variante consumible no está
+        # "Disponible" ni "En Terreno", su condición operativa es su stock.
+        sa.select(AssetState.nombre, sa.func.count(Unidad.id).label("count"))
+        .join(Unidad, Unidad.estado_id == AssetState.id)
+        .where(Unidad.tenant_id == token.tenant_id)
         .group_by(AssetState.nombre)
     )).all()
 
@@ -117,46 +120,47 @@ async def inventory_last_days(token: CurrentToken, session: DBSession, days: int
 
 @router.get("/low-stock-detail")
 async def low_stock_detail(token: CurrentToken, session: DBSession):
-    """Activos consumibles con stock por debajo del mínimo."""
-    rows = (await session.execute(
-        sa.select(
-            Asset.id,
-            Asset.uid_fisico,
-            Asset.nombre,
-            Asset.stock_actual,
-            Asset.stock_minimo,
-            Asset.unidad,
-            AssetFamily.nombre.label("family_nombre"),
-            AssetFamily.color.label("family_color"),
-            Ubicacion.rack.label("ubicacion_rack"),
-            Ubicacion.nivel.label("ubicacion_nivel"),
-            Ubicacion.posicion.label("ubicacion_posicion"),
-        )
-        .join(AssetFamily, Asset.family_id == AssetFamily.id)
-        .outerjoin(Ubicacion, Asset.ubicacion_id == Ubicacion.id)
-        .where(Asset.tenant_id == token.tenant_id)
-        .where(AssetFamily.comportamiento == "consumible")
-        .where(Asset.stock_actual <= Asset.stock_minimo)
-        .order_by(Asset.stock_actual.asc())
-    )).all()
+    """Quiebres unificados: consumibles por su columna, herramientas por conteo.
 
-    return [
-        {
-            "id": r.id,
-            "uid_fisico": r.uid_fisico,
-            "nombre": r.nombre,
-            "stock_actual": float(r.stock_actual),
-            "stock_minimo": float(r.stock_minimo),
-            "unidad": r.unidad,
-            "family_nombre": r.family_nombre,
-            "family_color": r.family_color,
-            # Dónde reponer, para no tener que abrir la ficha del activo
-            "ubicacion_rack": r.ubicacion_rack,
-            "ubicacion_nivel": r.ubicacion_nivel,
-            "ubicacion_posicion": r.ubicacion_posicion,
-        }
-        for r in rows
-    ]
+    Incluye ejemplares: "quedan menos de 2 taladros disponibles" es una alerta tan
+    válida como la de los tornillos, sólo que su stock se deriva del conteo.
+    """
+    repo = VarianteRepository(session, token.tenant_id)
+    filas = []
+    for variante, _total, disponibles in await repo.bajo_stock():
+        familia = variante.producto.family
+        efectivo = VarianteRepository.stock_efectivo(
+            variante, familia.comportamiento, disponibles
+        )
+        ubic = variante.ubicacion
+        filas.append({
+            "id": variante.id,
+            "uid_fisico": next((c.codigo for c in variante.codigos if c.es_principal), None),
+            "nombre": f"{variante.producto.nombre} · {variante.nombre}",
+            "stock_actual": float(efectivo),
+            "stock_minimo": float(variante.stock_minimo),
+            "unidad": variante.unidad,
+            "family_nombre": familia.nombre,
+            "family_color": familia.color,
+            # Dónde reponer, para no tener que abrir la ficha
+            "ubicacion_rack": ubic.rack if ubic else None,
+            "ubicacion_nivel": ubic.nivel if ubic else None,
+            "ubicacion_posicion": ubic.posicion if ubic else None,
+        })
+    # El de menor stock primero: es el que hay que reponer ya
+    return sorted(filas, key=lambda x: x["stock_actual"])
+
+
+@router.get("/valor-bodega", response_model=ValorBodegaResponse)
+async def valor_bodega(token: CurrentToken, session: DBSession, limite: int = 10):
+    """Capital inmovilizado en bodega, con el detalle de dónde se concentra.
+
+    El total solo no decide nada: lo accionable es qué activos acumulan el valor
+    y hace cuánto que no se mueven.
+    """
+    return await VarianteRepository(session, token.tenant_id).valor_bodega(
+        limite_detalle=limite
+    )
 
 
 @router.get("/costo-materiales-por-proyecto", response_model=list[CostoProyectoResponse])
@@ -175,32 +179,61 @@ async def costo_materiales_por_proyecto(
     return await repo.costo_materiales_por_proyecto(solo_activos=solo_activos)
 
 
+@router.get(
+    "/costo-materiales-por-proyecto/{project_id}/materiales",
+    response_model=list[MaterialDeProyectoResponse],
+)
+async def materiales_de_proyecto(project_id: int, token: CurrentToken, session: DBSession):
+    """En qué materiales se fue el gasto de una obra, con cantidades netas.
+
+    El total responde cuánto; esto responde en qué, que es lo accionable: el mismo
+    monto significa cosas distintas si se fue en un consumible barato que en uno caro.
+    """
+    from app.repositories.inventory_log import InventoryLogRepository
+
+    repo = InventoryLogRepository(session, token.tenant_id)
+    return await repo.materiales_de_proyecto(project_id)
+
+
 @router.get("/overdue-loans")
 async def overdue_loans(token: CurrentToken, session: DBSession):
-    """Préstamos activos que superaron el límite de días de su activo o familia."""
+    """Préstamos abiertos que superaron el límite de días de su variante o familia."""
+    from app.models.codigo import Codigo
+    from app.models.producto import Producto
+
     Operario = sa.orm.aliased(User, name="operario")
+    principal = (
+        sa.select(Codigo.unidad_id, Codigo.codigo)
+        .where(Codigo.tenant_id == token.tenant_id)
+        .where(Codigo.es_principal.is_(True))
+        .where(Codigo.unidad_id.isnot(None))
+        .subquery()
+    )
 
     rows = (await session.execute(
         sa.select(
             Loan.id.label("loan_id"),
             Loan.fecha_entrega,
-            Asset.id.label("asset_id"),
-            Asset.uid_fisico,
-            Asset.nombre.label("asset_nombre"),
-            Asset.dias_max_prestamo.label("asset_dias"),
+            Unidad.id.label("unidad_id"),
+            principal.c.codigo.label("uid_fisico"),
+            (Producto.nombre + " · " + Variante.nombre).label("asset_nombre"),
+            Variante.dias_max_prestamo.label("variante_dias"),
             AssetFamily.dias_max_prestamo.label("family_dias"),
             AssetFamily.nombre.label("family_nombre"),
             AssetFamily.color.label("family_color"),
             Operario.nombre.label("user_nombre"),
         )
-        .join(Asset, Loan.asset_id == Asset.id)
-        .join(AssetFamily, Asset.family_id == AssetFamily.id)
+        .join(Unidad, Loan.unidad_id == Unidad.id)
+        .join(Variante, Unidad.variante_id == Variante.id)
+        .join(Producto, Variante.producto_id == Producto.id)
+        .join(AssetFamily, Producto.family_id == AssetFamily.id)
         .join(Operario, Loan.user_id == Operario.id)
+        .outerjoin(principal, principal.c.unidad_id == Unidad.id)
         .where(Loan.tenant_id == token.tenant_id)
         .where(Loan.fecha_devolucion_real.is_(None))
         .where(
             sa.or_(
-                Asset.dias_max_prestamo.isnot(None),
+                Variante.dias_max_prestamo.isnot(None),
                 AssetFamily.dias_max_prestamo.isnot(None),
             )
         )
@@ -209,15 +242,15 @@ async def overdue_loans(token: CurrentToken, session: DBSession):
     now = datetime.now(timezone.utc)
     result = []
     for r in rows:
-        # Herencia: activo override → familia → sin límite
-        limite = r.asset_dias if r.asset_dias is not None else r.family_dias
+        # Herencia: override de la variante → familia → sin límite
+        limite = r.variante_dias if r.variante_dias is not None else r.family_dias
         if limite is None:
             continue
         dias_transcurridos = (now - r.fecha_entrega.replace(tzinfo=timezone.utc)).days
         if dias_transcurridos > limite:
             result.append({
                 "loan_id": r.loan_id,
-                "asset_id": r.asset_id,
+                "asset_id": r.unidad_id,
                 "uid_fisico": r.uid_fisico,
                 "asset_nombre": r.asset_nombre,
                 "family_nombre": r.family_nombre,
@@ -226,8 +259,6 @@ async def overdue_loans(token: CurrentToken, session: DBSession):
                 "dias_transcurridos": dias_transcurridos,
                 "dias_max": limite,
                 "dias_excedido": dias_transcurridos - limite,
-                "fecha_entrega": r.fecha_entrega.isoformat(),
             })
 
-    result.sort(key=lambda x: x["dias_excedido"], reverse=True)
     return result

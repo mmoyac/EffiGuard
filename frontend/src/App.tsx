@@ -6,14 +6,15 @@ import { usePWAManifest } from "./hooks/usePWAManifest";
 import { Layout } from "./components/layout/Layout";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
-import { Assets } from "./pages/Assets";
-import { AssetEdit } from "./pages/AssetEdit";
+import { Catalogo } from "./pages/Catalogo";
+import { Proveedores } from "./pages/Proveedores";
+import { EscanearCatalogo } from "./pages/EscanearCatalogo";
 import { Loans } from "./pages/Loans";
 import { Inventory } from "./pages/Inventory";
-import { Scanner } from "./pages/Scanner";
 import { MyLoans } from "./pages/MyLoans";
 import { Users } from "./pages/Users";
 import { Projects } from "./pages/Projects";
+import { Ubicaciones } from "./pages/Ubicaciones";
 import { AdminTenants } from "./pages/admin/AdminTenants";
 import { AdminUsers } from "./pages/admin/AdminUsers";
 import { AdminAssetStates } from "./pages/admin/AdminAssetStates";
@@ -57,14 +58,15 @@ export default function App() {
           }
         >
           <Route index element={<HomeRedirect />} />
-          <Route path="assets" element={<Assets />} />
-          <Route path="assets/:id/edit" element={<AssetEdit />} />
-          <Route path="assets/scan" element={<Scanner />} />
+          <Route path="catalogo" element={<Catalogo />} />
+          <Route path="catalogo/scan" element={<EscanearCatalogo />} />
+          <Route path="proveedores" element={<Proveedores />} />
           <Route path="loans" element={<Loans />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="my-loans" element={<MyLoans />} />
           <Route path="users" element={<Users />} />
           <Route path="projects" element={<Projects />} />
+          <Route path="ubicaciones" element={<Ubicaciones />} />
           <Route path="admin/tenants" element={<AdminTenants />} />
           <Route path="admin/users" element={<AdminUsers />} />
           <Route path="admin/asset-states" element={<AdminAssetStates />} />

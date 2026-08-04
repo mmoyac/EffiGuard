@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, computed_field
 
@@ -8,7 +9,10 @@ from app.schemas.common import Cantidad
 class InventoryLogResponse(BaseModel):
     id: int
     tenant_id: int
-    asset_id: int
+    # Nullable mientras conviven los dos catálogos: los movimientos del catálogo
+    # nuevo llegan con `variante_id` y sin activo.
+    asset_id: int | None = None
+    variante_id: int | None = None
     asset_nombre: str | None = None
     asset_uid: str | None = None
     asset_tipo: str | None = None
@@ -36,6 +40,74 @@ class InventoryLogResponse(BaseModel):
         if self.costo_unitario is None:
             return None
         return float(self.cantidad * self.costo_unitario)
+
+
+class ValorBodegaItem(BaseModel):
+    asset_id: int
+    uid_fisico: str
+    nombre: str | None = None
+    comportamiento: str
+    family_color: str | None = None
+    stock_actual: Cantidad
+    unidad: str | None = None
+    # Cuánto vale cada uno. Sin este dato el panel muestra un total que no se
+    # puede verificar de cabeza: "$290.000" no dice si son 2 caros o 20 baratos.
+    valor_unitario: Cantidad
+    valor: Cantidad
+    dias_sin_movimiento: int
+
+
+class ValorBodegaResponse(BaseModel):
+    """Cuánta plata hay parada en bodega.
+
+    Existencias y herramientas van separadas: la primera es capital de trabajo,
+    la segunda activo fijo. Sumarlas daría un número sin significado.
+    """
+
+    existencias: Cantidad
+    herramientas: Cantidad
+    activos_sin_precio: int
+    detalle: list[ValorBodegaItem]
+
+
+class VarianteQueryResult(BaseModel):
+    """Respuesta para el agente externo: qué hay y dónde encontrarlo."""
+
+    producto: str
+    variante: str
+    tipo: str                      # prestable | consumible
+    unidad: str = "unidad"
+    # prestable
+    unidades_total: int = 0
+    unidades_disponibles: int = 0
+    prestadas_a: list[str] = []
+    # consumible
+    stock_actual: Cantidad = Decimal(0)
+    stock_minimo: Cantidad = Decimal(0)
+    bajo_stock: bool = False
+    # Dónde encontrarlo, para que el agente pueda decirlo sin otra consulta
+    ubicacion_rack: str | None = None
+    ubicacion_nivel: str | None = None
+    ubicacion_posicion: str | None = None
+
+
+class MaterialDeProyectoResponse(BaseModel):
+    """Un material dentro del gasto de una obra: en qué se fue la plata.
+
+    `cantidad` es neta —despachado menos reintegrado—: si salieron 100 y volvieron
+    20, la obra ocupó 80.
+    """
+
+    asset_id: int | None = None
+    variante_id: int | None = None
+    nombre: str | None = None
+    unidad: str | None = None
+    cantidad: Cantidad
+    despachado: Cantidad
+    reintegrado: Cantidad
+    merma: Cantidad
+    perdida: Cantidad
+    costo: Cantidad
 
 
 class CostoProyectoResponse(BaseModel):

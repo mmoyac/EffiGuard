@@ -1,7 +1,8 @@
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.asset import Asset
+from app.models.unidad import Unidad
+from app.models.variante import Variante
 from app.models.ubicacion import Ubicacion
 from app.repositories.base import BaseRepository
 
@@ -65,10 +66,25 @@ class UbicacionRepository(BaseRepository[Ubicacion]):
         return list(result.scalars().all())
 
     async def contar_assets(self, ubicacion_id: int) -> int:
-        result = await self.session.execute(
-            select(func.count())
-            .select_from(Asset)
-            .where(Asset.ubicacion_id == ubicacion_id)
-            .where(Asset.tenant_id == self.tenant_id)
-        )
-        return result.scalar_one()
+        """Cuántos items ocupan la posición: variantes de consumible más ejemplares.
+
+        Se suman los dos niveles porque una ubicación la ocupa tanto el pozo de un
+        consumible como un taladro puntual, y borrarla dejaría a ambos sin sitio.
+        """
+        variantes = (
+            await self.session.execute(
+                select(func.count())
+                .select_from(Variante)
+                .where(Variante.ubicacion_id == ubicacion_id)
+                .where(Variante.tenant_id == self.tenant_id)
+            )
+        ).scalar_one()
+        unidades = (
+            await self.session.execute(
+                select(func.count())
+                .select_from(Unidad)
+                .where(Unidad.ubicacion_id == ubicacion_id)
+                .where(Unidad.tenant_id == self.tenant_id)
+            )
+        ).scalar_one()
+        return variantes + unidades

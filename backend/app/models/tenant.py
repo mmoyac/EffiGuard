@@ -19,6 +19,5 @@ class Tenant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     users: Mapped[list["User"]] = relationship(back_populates="tenant")
-    assets: Mapped[list["Asset"]] = relationship(back_populates="tenant")
     asset_families: Mapped[list["AssetFamily"]] = relationship(back_populates="tenant")
     subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="tenant")

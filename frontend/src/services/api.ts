@@ -63,47 +63,16 @@ export const menuApi = {
   get: () => api.get("/menu"),
 };
 
-export const assetsApi = {
-  list: (skip = 0, limit = 50, comportamiento?: string) => {
-    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
-    if (comportamiento) params.set("comportamiento", comportamiento);
-    return api.get(`/assets?${params}`);
-  },
-  getById: (id: number) => api.get(`/assets/${id}`),
-  /** Devuelve un sobre de resolución: puede traer una unidad o varias candidatas. */
-  scan: (codigo: string) => api.get(`/assets/scan/${encodeURIComponent(codigo)}`),
-  lowStock: () => api.get("/assets/low-stock"),
-  // Código de fabricante — flujo de compra
-  productoPreview: (codigo: string) => api.get(`/assets/producto/${encodeURIComponent(codigo)}`),
-  crearPorCodigo: (codigo_fabricante: string, cantidad: number) =>
-    api.post("/assets/from-codigo-fabricante", { codigo_fabricante, cantidad }),
-  // Reintegro de sobrantes
-  despachosPendientes: (id: number) => api.get(`/assets/${id}/despachos-pendientes`),
-  reintegrar: (id: number, data: object) => api.post(`/assets/${id}/reintegro`, data),
-  update: (id: number, data: object) => api.patch(`/assets/${id}`, data),
-  reportLoss: (id: number, data: object) => api.post(`/assets/${id}/loss`, data),
-  adjustStock: (id: number, data: object) => api.post(`/assets/${id}/adjust`, data),
-  reportShrinkage: (id: number, data: object) => api.post(`/assets/${id}/shrinkage`, data),
-  repairDone: (id: number, data: object) => api.post(`/assets/${id}/repair-done`, data),
-  importTemplate: () => api.get("/assets/import/template", { responseType: "blob" }),
-  importValidate: (file: File) => {
-    const form = new FormData();
-    form.append("file", file);
-    return api.post("/assets/import?dry_run=true", form, { headers: { "Content-Type": "multipart/form-data" } });
-  },
-  importConfirm: (file: File) => {
-    const form = new FormData();
-    form.append("file", file);
-    return api.post("/assets/import?dry_run=false", form, { headers: { "Content-Type": "multipart/form-data" } });
-  },
-};
+
 
 export const loansApi = {
   list: (activeOnly = false) => api.get(`/loans?active_only=${activeOnly}`),
-  create: (data: object) => api.post("/loans", data),
-  return: (id: number, returningUserId: number, obs?: string, sendToRepair?: boolean) => api.post(`/loans/${id}/return`, { returning_user_id: returningUserId, observaciones: obs, send_to_repair: sendToRepair ?? false }),
-  withdrawConsumable: (data: object) => api.post("/loans/consumables/withdraw", data),
-  activeByAsset: (assetId: number) => api.get(`/loans/active/asset/${assetId}`),
+  my: () => api.get("/loans/my"),
+  activeByUnidad: (unidadId: number) => api.get(`/loans/active/unidad/${unidadId}`),
+  disponibles: (varianteId: number) => api.get(`/loans/disponibles/${varianteId}`),
+  piezasDelKit: (unidadId: number) => api.get(`/loans/kit/${unidadId}`),
+  create: (d: object) => api.post("/loans", d),
+  return_: (loanId: number, d: object) => api.post(`/loans/${loanId}/return`, d),
 };
 
 export const usersApi = {
@@ -130,6 +99,85 @@ export const catalogApi = {
   brands: () => api.get("/catalog/brands"),
   models: (brandId?: number) => api.get(`/catalog/models${brandId ? `?brand_id=${brandId}` : ""}`),
   states: () => api.get("/catalog/states"),
+};
+
+/**
+ * Catálogo producto → variante → unidad.
+ * Convive con `assetsApi` mientras dura la migración por tramos: éste sirve la
+ * carga, aquél sigue sirviendo préstamos, escaneo e inventario.
+ */
+export const catalogoApi = {
+  listProductos: (params?: { comportamiento?: string; buscar?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.comportamiento) q.set("comportamiento", params.comportamiento);
+    if (params?.buscar) q.set("buscar", params.buscar);
+    return api.get(`/productos${q.toString() ? `?${q}` : ""}`);
+  },
+  getProducto: (id: number) => api.get(`/productos/${id}`),
+  createProducto: (d: object) => api.post("/productos", d),
+  updateProducto: (id: number, d: object) => api.patch(`/productos/${id}`, d),
+  deleteProducto: (id: number) => api.delete(`/productos/${id}`),
+
+  listVariantes: (params?: { comportamiento?: string; buscar?: string; producto_id?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.comportamiento) q.set("comportamiento", params.comportamiento);
+    if (params?.buscar) q.set("buscar", params.buscar);
+    if (params?.producto_id) q.set("producto_id", String(params.producto_id));
+    return api.get(`/variantes${q.toString() ? `?${q}` : ""}`);
+  },
+  getVariante: (id: number) => api.get(`/variantes/${id}`),
+  lowStock: () => api.get("/variantes/low-stock"),
+  createVariante: (productoId: number, d: object) => api.post(`/productos/${productoId}/variantes`, d),
+  updateVariante: (id: number, d: object) => api.patch(`/variantes/${id}`, d),
+  deleteVariante: (id: number) => api.delete(`/variantes/${id}`),
+
+  listUnidades: (varianteId: number) => api.get(`/variantes/${varianteId}/unidades`),
+  createUnidades: (varianteId: number, d: object) => api.post(`/variantes/${varianteId}/unidades`, d),
+  updateUnidad: (id: number, d: object) => api.patch(`/unidades/${id}`, d),
+  deleteUnidad: (id: number) => api.delete(`/unidades/${id}`),
+
+  addCodigoVariante: (varianteId: number, d: object) => api.post(`/variantes/${varianteId}/codigos`, d),
+  addCodigoUnidad: (unidadId: number, d: object) => api.post(`/unidades/${unidadId}/codigos`, d),
+  setCodigoPrincipal: (id: number) => api.patch(`/codigos/${id}/principal`),
+  deleteCodigo: (id: number) => api.delete(`/codigos/${id}`),
+
+  familias: () => api.get("/asset-families"),
+
+  scan: (codigo: string) => api.get(`/scan-catalogo/${encodeURIComponent(codigo)}`),
+
+  purchase: (varianteId: number, d: object) => api.post(`/variantes/${varianteId}/purchase`, d),
+  withdraw: (varianteId: number, d: object) => api.post(`/variantes/${varianteId}/withdraw`, d),
+  adjust: (varianteId: number, d: object) => api.post(`/variantes/${varianteId}/adjust`, d),
+  shrinkage: (varianteId: number, d: object) => api.post(`/variantes/${varianteId}/shrinkage`, d),
+  loss: (varianteId: number, d: object) => api.post(`/variantes/${varianteId}/loss`, d),
+  despachosPendientes: (varianteId: number) =>
+    api.get(`/variantes/${varianteId}/despachos-pendientes`),
+  reintegro: (varianteId: number, d: object) => api.post(`/variantes/${varianteId}/reintegro`, d),
+  repairDone: (unidadId: number, d: object) => api.post(`/unidades/${unidadId}/repair-done`, d),
+  lossUnidad: (unidadId: number, d: object) => api.post(`/unidades/${unidadId}/loss`, d),
+  reingresoUnidad: (unidadId: number, d: object) => api.post(`/unidades/${unidadId}/reingreso`, d),
+  movimientos: (varianteId: number) => api.get(`/variantes/${varianteId}/movimientos`),
+
+  listProveedores: () => api.get("/proveedores"),
+  createProveedor: (d: object) => api.post("/proveedores", d),
+  updateProveedor: (id: number, d: object) => api.patch(`/proveedores/${id}`, d),
+  deleteProveedor: (id: number) => api.delete(`/proveedores/${id}`),
+
+  importTemplate: () => api.get("/catalogo/import/template", { responseType: "blob" }),
+  importValidate: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post("/catalogo/import?dry_run=true", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  importConfirm: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post("/catalogo/import?dry_run=false", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 export const adminApi = {

@@ -454,7 +454,7 @@ async def set_permissions(data: PermissionSet, token: SuperAdminToken, session: 
 @router.get("/tenants/{tenant_id}/summary")
 async def tenant_summary(tenant_id: int, token: SuperAdminToken, session: DBSession):
     """Resumen del tenant: usuarios, activos y préstamos activos."""
-    from app.models.asset import Asset
+    from app.models.variante import Variante
     from app.models.loan import Loan
 
     tenant = (await session.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
@@ -465,7 +465,7 @@ async def tenant_summary(tenant_id: int, token: SuperAdminToken, session: DBSess
         sa.select(sa.func.count()).select_from(User).where(User.tenant_id == tenant_id)
     )).scalar()
     assets_count = (await session.execute(
-        sa.select(sa.func.count()).select_from(Asset).where(Asset.tenant_id == tenant_id)
+        sa.select(sa.func.count()).select_from(Variante).where(Variante.tenant_id == tenant_id)
     )).scalar()
     loans_count = (await session.execute(
         sa.select(sa.func.count()).select_from(Loan)

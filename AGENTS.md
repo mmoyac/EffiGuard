@@ -9,8 +9,8 @@ Actúa como un Ingeniero de Software Fullstack Senior y Arquitecto Cloud. Tu obj
 - **Infraestructura:** Docker y Docker Compose para orquestar Backend, Frontend y Base de Datos.
 - **PWA:** Configuración de manifiesto y service workers para instalación en dispositivos móviles.
 
-## 3. Modelo de Datos (DBML - 14 Tablas Normalizadas)
-Implementar el siguiente esquema asegurando integridad referencial y multi-tenancy:
+## 3. Modelo de Datos (DBML)
+Esquema vigente, con integridad referencial y multi-tenancy en toda consulta:
 
 ```dbml
 // MÓDULO 0: MULTI-TENANT & CONTROL GLOBAL
@@ -69,47 +69,104 @@ Table role_menu_permissions {
 
 // MÓDULO 3: MAESTROS Y CATÁLOGO
 Table brands { id integer [primary key], tenant_id integer [ref: > tenants.id], nombre varchar }
-Table models { id integer [primary key], tenant_id integer [ref: > tenants.id], brand_id integer [ref: > brands.id], nombre varchar }
 Table asset_states { id integer [primary key], nombre varchar } // Disponible, En Terreno, Reparación, Robado
+Table asset_families { id integer [primary key], tenant_id integer [ref: > tenants.id], nombre varchar, comportamiento varchar, color varchar, dias_max_prestamo integer [null] }
 Table projects { id integer [primary key], tenant_id integer [ref: > tenants.id], nombre varchar, is_active boolean }
+Table proveedores { id integer [primary key], tenant_id integer [ref: > tenants.id], nombre varchar, rut varchar [null], contacto varchar [null] }
+Table ubicaciones { id integer [primary key], tenant_id integer [ref: > tenants.id], rack varchar, nivel varchar, posicion varchar }
 
-// MÓDULO 4: ACTIVOS E INVENTARIO (Híbrido Herramientas/Consumibles)
-Table assets {
+// MÓDULO 4: CATÁLOGO (producto -> variante -> unidad)
+// El producto agrupa y no tiene stock; la variante ES la posición de stock;
+// la unidad es el ejemplar físico y sólo existe en familias prestables.
+Table productos {
   id integer [primary key]
   tenant_id integer [ref: > tenants.id]
-  uid_fisico varchar [unique] // Código QR o Tag RFID
-  parent_asset_id integer [null, ref: > assets.id] // Lógica para Kits (Padre-Hijo)
-  model_id integer [ref: > models.id]
-  tipo varchar // 'herramienta' (requiere préstamo) o 'consumible' (solo stock)
+  family_id integer [ref: > asset_families.id] // define prestable vs consumible
+  brand_id integer [null, ref: > brands.id]
+  nombre varchar
+  descripcion text [null]
+  // unique (tenant_id, nombre)
+}
+
+Table variantes {
+  id integer [primary key]
+  tenant_id integer [ref: > tenants.id]
+  producto_id integer [ref: > productos.id]
+  nombre varchar              // "6x40 zincado"
+  atributos jsonb             // {"medida":"6x40","material":"zincado"} - indice GIN
+  unidad varchar              // unidad | metro | kilo | litro
+  stock_actual decimal(12,3)  // SOLO consumibles; en prestables se deriva del conteo
+  stock_minimo decimal(12,3)  // 0 desactiva la alerta de quiebre
+  precio_compra decimal(12,2) [null]
+  valor_reposicion decimal(12,2) [null]
+  dias_max_prestamo integer [null] // si es nulo hereda de la familia
+  ubicacion_id integer [null, ref: > ubicaciones.id]
+  // unique (producto_id, nombre)
+}
+
+Table unidades {
+  id integer [primary key]
+  tenant_id integer [ref: > tenants.id]
+  variante_id integer [ref: > variantes.id]
   estado_id integer [ref: > asset_states.id]
-  stock_actual integer [default: 0]
-  stock_minimo integer [default: 0]
-  valor_reposicion decimal(12,2)
-  proxima_mantencion date
-  created_at timestamp [default: `now()`]
+  ubicacion_id integer [null, ref: > ubicaciones.id] // gana sobre la de la variante
+  parent_unidad_id integer [null, ref: > unidades.id] // kits padre-hijo
+  proxima_mantencion date [null]
+}
+
+// Todo lo escaneable en una sola tabla: un ejemplar puede tener su QR y su numero
+// de serie, y una variante los codigos de cada proveedor mas los de sus empaques.
+Table codigos {
+  id integer [primary key]
+  tenant_id integer [ref: > tenants.id]
+  variante_id integer [null, ref: > variantes.id]
+  unidad_id integer [null, ref: > unidades.id]  // CHECK: exactamente uno de los dos
+  codigo varchar        // unique (tenant_id, codigo) - por tenant, no global
+  tipo varchar          // fabricante | proveedor | empaque | propio | serie_fabrica
+  proveedor_id integer [null, ref: > proveedores.id]
+  factor decimal(12,3)  // cuantas unidades trae este empaque. CHECK > 0
+  nombre_empaque varchar [null] // caja, rollo, tambor...
+  es_principal boolean  // el que se imprime en la etiqueta. Unico parcial por dueno
 }
 
 // MÓDULO 5: OPERACIONES Y AUDITORÍA
 Table loans {
   id integer [primary key]
   tenant_id integer [ref: > tenants.id]
-  asset_id integer [ref: > assets.id]
-  user_id integer [ref: > users.id] // Operario que recibe
+  unidad_id integer [ref: > unidades.id] // se presta un EJEMPLAR, no un modelo
+  user_id integer [ref: > users.id] // Operario que recibe y responde
   bodeguero_id integer [ref: > users.id] // Quien entrega
   project_id integer [null, ref: > projects.id]
   fecha_entrega timestamp [default: `now()`]
   fecha_devolucion_prevista timestamp
+  fecha_devolucion_real timestamp [null]
 }
 
 Table inventory_logs {
   id integer [primary key]
   tenant_id integer [ref: > tenants.id]
-  asset_id integer [ref: > assets.id]
-  user_id integer [ref: > users.id] // Ejecutor de la acción
-  tipo_movimiento varchar // entrega, devolucion, ajuste, compra, perdida
-  cantidad integer [default: 1]
+  variante_id integer [ref: > variantes.id]  // toda posicion de stock es una variante
+  unidad_id integer [null, ref: > unidades.id] // solo si identifica un ejemplar
+  codigo_id integer [null, ref: > codigos.id]  // el escaneado en una compra
+  proveedor_id integer [null, ref: > proveedores.id] // deducido del codigo
+  user_id integer [ref: > users.id] // Ejecutor de la accion
+  operario_id integer [null, ref: > users.id] // Quien recibe o responde
+  project_id integer [null, ref: > projects.id]
+  origen_log_id integer [null, ref: > inventory_logs.id] // reintegro y reingreso
+  tipo_movimiento varchar // compra, entrega, devolucion, ajuste, merma, perdida,
+                          // reingreso, reintegro, reparacion, reparacion_completada
+  cantidad decimal(12,3)
+  costo_unitario decimal(12,4) [null] // congelado al ocurrir. Null = sin valorizar
   fecha_hora timestamp [default: `now()`]
   observaciones text
+}
+
+Table api_keys {
+  id integer [primary key]
+  tenant_id integer [ref: > tenants.id]
+  key varchar [unique] // prefijo efg_ + 56 hex
+  description varchar
+  is_active boolean [default: true]
 }
 
 Table subscriptions {
@@ -131,9 +188,19 @@ UX/UI Industrial:
 - **Mobile-first obligatorio.** La app debe funcionar perfectamente en smartphones y tablets industriales. Diseñar primero para pantallas pequeñas (≥320px) y escalar hacia arriba. Usar clases responsive de Tailwind (`sm:`, `md:`) para adaptar layouts, nunca al revés.
 - Las tablas deben reemplazarse por cards en móvil o usar `overflow-x-auto` únicamente como último recurso, nunca como solución por defecto.
 
-Flujo de Consumibles: Al retirar consumibles (pernos, discos), el sistema solicita cantidad, descuenta de assets.stock_actual y genera un log en inventory_logs sin crear un registro en loans.
+Un material, un pozo de stock: Un mismo consumible comprado a varios proveedores es UNA variante con varios códigos, no varias variantes. Partir el stock por proveedor rompe la alerta de mínimo y obliga al bodeguero a elegir de qué pila descontar. Criterio de corte: ¿el que lo va a usar nota la diferencia?
 
-Gestión de Kits: Si un activo tiene parent_asset_id nulo pero posee "hijos" vinculados, el sistema debe permitir realizar el préstamo del conjunto completo (Kit) con un solo escaneo del código del padre.
+El stock nunca se escribe directo: se mueve por compra, entrega, ajuste, merma, pérdida o reintegro, y cada movimiento queda en inventory_logs con su costo congelado. Ningún formulario debe exponer stock_actual como campo editable.
+
+Stock derivado en prestables: El stock de una variante prestable es el conteo de sus unidades Disponibles, NO una columna. Guardarlo obligaría a sincronizarlo en cinco flujos distintos.
+
+Flujo de Consumibles: Al retirar consumibles el sistema solicita cantidad, descuenta de variantes.stock_actual y genera un log tipo entrega sin crear registro en loans — un tornillo no se devuelve. Lo que sobra vuelve por reintegro contra su despacho de origen.
+
+Gestión de Kits: Si una unidad tiene unidades hijas, un escaneo del padre presta el conjunto completo. La disponibilidad se valida ANTES de crear ningún préstamo: entregar media caja y descubrirlo a mitad de camino deja registros que no se pueden deshacer.
+
+Movimientos separados: consumo, merma y pérdida no se consolidan. Si el robo se diluye dentro del consumo nadie lo ve, y verlo es el propósito del sistema.
+
+Carga masiva vs. interfaz: El Excel es para el arranque; el día a día se opera desde la UI, que debe cubrir el ciclo completo por su cuenta.
 
 Navegación Dinámica: El menú lateral de React no debe estar hardcodeado. Debe construirse consumiendo el endpoint que retorna los menu_items permitidos para el role_id del usuario autenticado.
 

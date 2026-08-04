@@ -4,7 +4,7 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { Package, ArrowLeftRight, AlertTriangle, TrendingUp, Clock, Wallet, ChevronDown, ChevronUp } from "lucide-react";
+import { Package, ArrowLeftRight, AlertTriangle, TrendingUp, Clock, Wallet, Warehouse, ChevronDown, ChevronUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { familyColor } from "../utils/familyColors";
@@ -48,6 +48,7 @@ const dashApi = {
   lowStockDetail: () => api.get("/dashboard/low-stock-detail").then((r: { data: LowStockItem[] }) => r.data),
   overdueLoans:   () => api.get("/dashboard/overdue-loans").then((r: { data: OverdueLoan[] }) => r.data),
   costoProyectos: () => api.get("/dashboard/costo-materiales-por-proyecto").then((r: { data: CostoProyecto[] }) => r.data),
+  valorBodega:    () => api.get("/dashboard/valor-bodega").then((r: { data: ValorBodega }) => r.data),
 };
 
 /** Costo de MATERIALES de un proyecto. No incluye mano de obra ni herramientas. */
@@ -61,8 +62,100 @@ interface CostoProyecto {
   movimientos_sin_valorizar: number;
 }
 
+interface ValorBodegaItem {
+  asset_id: number; uid_fisico: string; nombre: string | null;
+  comportamiento: string; family_color: string | null;
+  stock_actual: number; unidad: string | null;
+  valor_unitario: number; valor: number; dias_sin_movimiento: number;
+}
+interface ValorBodega {
+  existencias: number;
+  herramientas: number;
+  activos_sin_precio: number;
+  detalle: ValorBodegaItem[];
+}
+
+/** Un material dentro del gasto de una obra. `cantidad` es neta de reintegros. */
+interface MaterialProyecto {
+  asset_id: number | null;
+  variante_id: number | null;
+  nombre: string | null;
+  unidad: string | null;
+  cantidad: number;
+  despachado: number;
+  reintegrado: number;
+  merma: number;
+  perdida: number;
+  costo: number;
+}
+
 const money = (v: number) =>
   `$${Math.round(Number(v)).toLocaleString("es-CL")}`;
+
+const cantidadFmt = (v: number) =>
+  Number(v).toLocaleString("es-CL", { maximumFractionDigits: 3 });
+
+/**
+ * En qué materiales se fue el gasto de la obra.
+ *
+ * El total responde *cuánto*; esto responde *en qué*, que es lo accionable: el
+ * mismo monto significa cosas distintas si se fue en un consumible barato que en
+ * uno caro. Se carga sólo al desplegar el proyecto.
+ */
+function MaterialesDeProyecto({ projectId }: { projectId: number }) {
+  const { data: materiales = [], isLoading } = useQuery<MaterialProyecto[]>(
+    ["dash-materiales", projectId],
+    () =>
+      api
+        .get(`/dashboard/costo-materiales-por-proyecto/${projectId}/materiales`)
+        .then((r: { data: MaterialProyecto[] }) => r.data)
+  );
+
+  if (isLoading) return <p className="pt-2 text-gray-500">Cargando materiales…</p>;
+  if (!materiales.length) return null;
+
+  return (
+    <div className="pt-2 mt-1 border-t border-gray-600/60 space-y-1.5">
+      <p className="text-gray-400 uppercase tracking-wide text-[10px]">Materiales</p>
+      {materiales.map((m) => (
+        <div key={`${m.asset_id ?? "v"}-${m.variante_id ?? "a"}`} className="flex gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-gray-200 truncate">{m.nombre ?? "—"}</p>
+            <p className="text-gray-500">
+              {cantidadFmt(m.cantidad)} {m.unidad ?? ""}
+              {/* Lo devuelto explica por qué la cantidad neta no es lo que salió */}
+              {m.reintegrado > 0 && (
+                <span className="text-cyan-400/80">
+                  {" "}
+                  · salieron {cantidadFmt(m.despachado)}, volvieron{" "}
+                  {cantidadFmt(m.reintegrado)}
+                </span>
+              )}
+              {m.perdida > 0 && (
+                <span className="text-red-400/80"> · {cantidadFmt(m.perdida)} perdidas</span>
+              )}
+              {m.merma > 0 && (
+                <span className="text-amber-400/80"> · {cantidadFmt(m.merma)} merma</span>
+              )}
+            </p>
+          </div>
+          <span className="text-gray-300 flex-shrink-0">{money(m.costo)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** "hace 8 meses" pesa distinto que "hace 240 días" al leer un monto. */
+function antiguedad(dias: number): string {
+  if (dias < 1) return "hoy";
+  if (dias === 1) return "ayer";
+  if (dias < 30) return `hace ${dias} días`;
+  const meses = Math.floor(dias / 30);
+  if (meses < 12) return `hace ${meses} ${meses === 1 ? "mes" : "meses"}`;
+  const años = Math.floor(dias / 365);
+  return `hace ${años} ${años === 1 ? "año" : "años"}`;
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function shortDate(iso: string) {
@@ -120,6 +213,7 @@ export function Dashboard() {
   const { data: lowStockItems = [] } = useQuery<LowStockItem[]>("dash-low-stock", dashApi.lowStockDetail, { refetchInterval: 60000 });
   const { data: overdueItems = [] } = useQuery<OverdueLoan[]>("dash-overdue", dashApi.overdueLoans, { refetchInterval: 60000 });
   const { data: costoProyectos = [] } = useQuery<CostoProyecto[]>("dash-costos", dashApi.costoProyectos, { refetchInterval: 60000 });
+  const { data: valorBodega } = useQuery<ValorBodega>("dash-valor-bodega", dashApi.valorBodega, { refetchInterval: 60000 });
   const [expandido, setExpandido] = useState<number | null>(null);
 
   // Inyectar color en los datos del donut para no necesitar <Cell>
@@ -260,6 +354,75 @@ export function Dashboard() {
           )}
         </div>
 
+        {/* Valor de bodega — capital inmovilizado */}
+        {valorBodega && (valorBodega.existencias > 0 || valorBodega.herramientas > 0 || valorBodega.activos_sin_precio > 0) && (
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Warehouse size={16} className="text-indigo-400" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-300">Valor de bodega</p>
+                <p className="text-xs text-gray-500">Capital inmovilizado</p>
+              </div>
+            </div>
+
+            {/* Separadas: una es capital de trabajo, la otra activo fijo */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-gray-700/50 rounded-xl px-3 py-2.5">
+                <p className="text-xs text-gray-400">Existencias</p>
+                <p className="text-lg font-bold text-indigo-300">{money(valorBodega.existencias)}</p>
+                <p className="text-[11px] text-gray-500">consumibles</p>
+              </div>
+              <div className="bg-gray-700/50 rounded-xl px-3 py-2.5">
+                <p className="text-xs text-gray-400">Herramientas</p>
+                <p className="text-lg font-bold text-gray-200">{money(valorBodega.herramientas)}</p>
+                <p className="text-[11px] text-gray-500">a reposición</p>
+              </div>
+            </div>
+
+            {valorBodega.detalle.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs text-gray-500">Dónde está la plata</p>
+                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                  {valorBodega.detalle.map((item) => (
+                    <div key={item.asset_id}
+                      className="flex items-center gap-2 bg-gray-700/50 border border-gray-600 rounded-xl px-3 py-2"
+                    >
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${familyColor(item.family_color ?? "blue").swatch}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{item.nombre ?? item.uid_fisico}</p>
+                        {/* De dónde sale el total: sin esto "$290.000" no se puede
+                            verificar de cabeza ni detectar un precio mal cargado. */}
+                        <p className="text-xs text-gray-400">
+                          {cantidadFmt(item.stock_actual)}{" "}
+                          {item.comportamiento === "prestable"
+                            ? item.stock_actual === 1 ? "ejemplar" : "ejemplares"
+                            : item.unidad ?? ""}
+                          {" × "}
+                          {money(item.valor_unitario)}
+                          <span className="text-gray-600">
+                            {item.comportamiento === "prestable" ? " reposición" : " compra"}
+                          </span>
+                        </p>
+                        {/* El monto solo no decide; la antigüedad sí */}
+                        <p className={`text-xs ${item.dias_sin_movimiento > 90 ? "text-amber-400/90" : "text-gray-500"}`}>
+                          {antiguedad(item.dias_sin_movimiento)}
+                        </p>
+                      </div>
+                      <span className="text-sm font-bold text-indigo-300 flex-shrink-0">{money(item.valor)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {valorBodega.activos_sin_precio > 0 && (
+              <p className="text-xs text-amber-400/90">
+                {valorBodega.activos_sin_precio} activos sin precio configurado
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Gasto en materiales por obra activa */}
         {costoProyectos.length > 0 && (
           <div className="bg-gray-800 border border-gray-700 rounded-2xl p-4 space-y-3">
@@ -313,6 +476,7 @@ export function Dashboard() {
                             {money(p.mermas)}
                           </span>
                         </p>
+                        <MaterialesDeProyecto projectId={p.project_id} />
                       </div>
                     )}
                   </div>

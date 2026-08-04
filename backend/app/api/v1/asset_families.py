@@ -47,16 +47,16 @@ async def update_family(family_id: int, data: AssetFamilyUpdate, token: CurrentT
 @router.delete("/{family_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_family(family_id: int, token: CurrentToken, session: DBSession):
     from sqlalchemy import select, func
-    from app.models.asset import Asset
+    from app.models.producto import Producto
 
     repo = AssetFamilyRepository(session, token.tenant_id)
     family = await repo.get(family_id)
     if not family:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Familia no encontrada")
 
-    # Verificar que no tenga activos asignados
+    # La familia se asigna al producto: sus variantes y unidades la heredan
     count = (await session.execute(
-        select(func.count()).select_from(Asset).where(Asset.family_id == family_id)
+        select(func.count()).select_from(Producto).where(Producto.family_id == family_id)
     )).scalar()
     if count:
         raise HTTPException(

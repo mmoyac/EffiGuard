@@ -10,5 +10,4 @@ class Brand(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
     nombre: Mapped[str] = mapped_column(String(100))
-
-    models: Mapped[list["AssetModel"]] = relationship(back_populates="brand")
+    productos: Mapped[list["Producto"]] = relationship(back_populates="brand")

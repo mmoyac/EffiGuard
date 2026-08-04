@@ -25,14 +25,39 @@ context: |
   - Migraciones Alembic numeradas (`001_…`, `002_…`) en `backend/alembic/versions/`.
     Todo cambio de modelo requiere su migración.
 
+  ## Modelo de catálogo
+
+  El catálogo tiene tres niveles y cada uno responde una pregunta distinta:
+
+  - `productos` — el bien conceptual ("Tornillo autoperforante"). Agrupa; NO tiene stock ni precio.
+  - `variantes` — el SKU ("6x40 zincado"). **La** posición de stock, precio y código de barras.
+  - `unidades` — el ejemplar físico. Sólo para familias prestables; es lo que se presta.
+
+  Reglas que se violan con facilidad:
+
+  - Un mismo material comprado a varios proveedores es UNA variante con varios códigos,
+    no varias variantes. El criterio: ¿el que lo va a usar nota la diferencia?
+  - El stock de una variante prestable NO se almacena: es el conteo de sus unidades
+    disponibles. Sólo los consumibles usan `variantes.stock_actual`.
+  - `codigos` es una sola tabla para todo lo escaneable, con `UNIQUE (tenant_id, codigo)`.
+    El `tipo` decide de qué nivel cuelga: `fabricante`/`proveedor`/`empaque` de la variante,
+    `serie_fabrica` de la unidad, `propio` de cualquiera.
+  - El `factor` de un código de empaque dice cuántas unidades trae esa caja. Vive en el
+    código porque la caja de un proveedor trae 100 y la del otro 250.
+  - El stock NUNCA se escribe directo: se mueve por compra, ajuste, merma, entrega,
+    pérdida o reintegro, y cada movimiento queda en `inventory_logs`.
+  - El costo se congela en cada movimiento. Cambiar un precio no revaloriza el pasado.
+
   ## Convenciones de dominio
 
   - El dominio se nombra en español (`nombre`, `estado_id`, `fecha_entrega`, `bodeguero_id`).
     Mantener ese idioma en modelos, campos y mensajes de error al usuario.
   - IDs estables usados por la lógica: estados 1 Disponible, 2 En Terreno, 3 En Reparación, 4 Robado.
     Roles: 1 super_admin, 2 admin, 3 bodeguero, 4 operario.
-  - El comportamiento de un activo (prestable vs consumible) viene de su familia
-    (`asset_families.comportamiento`), NO de un campo propio del activo.
+  - El comportamiento (prestable vs consumible) viene de la familia del PRODUCTO
+    (`asset_families.comportamiento`), y lo heredan sus variantes y unidades.
+    Ningún nivel declara su tipo por su cuenta.
+  - La carga masiva por Excel es para el arranque; el día a día se opera desde la interfaz.
 
   ## Reglas de UI (obligatorias)
 
