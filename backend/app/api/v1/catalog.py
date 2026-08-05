@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.core.dependencies import CurrentToken, DBSession
 from app.models.asset_state import AssetState
 from app.models.brand import Brand
+from app.repositories.base import BaseRepository
 from sqlalchemy import select
 
 router = APIRouter(prefix="/catalog", tags=["Catalog"])
