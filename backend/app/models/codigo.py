@@ -92,4 +92,13 @@ class Codigo(Base):
 
     variante: Mapped["Variante | None"] = relationship(back_populates="codigos")
     unidad: Mapped["Unidad | None"] = relationship(back_populates="codigos")
-    proveedor: Mapped["Proveedor | None"] = relationship(back_populates="codigos")
+    # Cargado siempre, no bajo demanda: `_codigo_resp` lo lee para armar cualquier
+    # respuesta, y un código recién creado no tiene relaciones cargadas (`refresh`
+    # repuebla columnas, no relaciones). Leerlo perezoso en contexto async revienta
+    # con MissingGreenlet, y sólo cuando el código trae proveedor —con `proveedor_id`
+    # nulo SQLAlchemy resuelve a None sin consultar—, así que el fallo se escondía
+    # justo en el caso menos frecuente. Las rutas de lectura ya lo traían con
+    # `selectinload` explícito; esto cubre las que construyen el objeto al vuelo.
+    proveedor: Mapped["Proveedor | None"] = relationship(
+        back_populates="codigos", lazy="selectin"
+    )
