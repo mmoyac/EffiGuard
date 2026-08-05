@@ -8,9 +8,11 @@ import uuid
 from fastapi import APIRouter, HTTPException, UploadFile, File, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, delete
+from sqlalchemy.exc import IntegrityError
 import sqlalchemy as sa
 
 from app.core.dependencies import DBSession
+from app.core.errors import error_usuario_duplicado
 from app.core.security import hash_password
 from app.core.superadmin import SuperAdminToken, ActingTenantId
 from app.services import pwa_icons
@@ -271,7 +273,10 @@ async def create_global_user(data: GlobalUserCreate, token: SuperAdminToken, ses
         uid_credencial=data.uid_credencial,
     )
     session.add(user)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as e:
+        raise error_usuario_duplicado(e, "Error al crear usuario")
     await session.refresh(user)
     return user
 
@@ -289,7 +294,10 @@ async def update_global_user(user_id: int, data: GlobalUserUpdate, token: SuperA
         setattr(user, k, v)
     if password:
         user.password_hash = hash_password(password)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as e:
+        raise error_usuario_duplicado(e, "Error al actualizar usuario")
     await session.refresh(user)
     return user
 

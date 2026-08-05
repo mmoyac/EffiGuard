@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from app.core.dependencies import CurrentToken, DBSession
+from app.core.errors import error_usuario_duplicado
 from app.core.security import hash_password
 from app.repositories.user import UserRepository
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
@@ -42,14 +43,7 @@ async def create_user(data: UserCreate, token: CurrentToken, session: DBSession)
             uid_credencial=data.uid_credencial,
         )
     except IntegrityError as e:
-        err = str(e.orig)
-        if "uid_credencial" in err:
-            raise HTTPException(status_code=400, detail="Esa credencial ya está asignada a otro usuario")
-        if "email" in err:
-            raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
-        if "rut" in err:
-            raise HTTPException(status_code=400, detail="Ya existe un usuario con ese RUT")
-        raise HTTPException(status_code=400, detail="Error al crear usuario")
+        raise error_usuario_duplicado(e, "Error al crear usuario")
 
 
 @router.get("/scan/{uid_credencial}", response_model=UserResponse)
@@ -80,4 +74,7 @@ async def update_user(user_id: int, data: UserUpdate, token: CurrentToken, sessi
     update_data = data.model_dump(exclude_none=True)
     if "password" in update_data:
         update_data["password_hash"] = hash_password(update_data.pop("password"))
-    return await repo.update(user, **update_data)
+    try:
+        return await repo.update(user, **update_data)
+    except IntegrityError as e:
+        raise error_usuario_duplicado(e, "Error al actualizar usuario")
