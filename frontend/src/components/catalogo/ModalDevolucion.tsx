@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "react-query";
 import { UserCheck, Wrench } from "lucide-react";
 import { loansApi, usersApi } from "../../services/api";
+import { CampoCredencial } from "../credencial/CampoCredencial";
 import { BTN, Campo, INPUT, Modal, mensajeError } from "./shared";
 
 type PrestamoActivo = {
@@ -99,22 +100,14 @@ export function ModalDevolucion({
         )}
       </div>
 
-      <Campo label="Escanea la credencial de quien devuelve">
-        <input
-          className={`${INPUT} font-mono`}
-          placeholder="Acerca la credencial o el QR…"
-          autoFocus
-          value={credencial}
-          onChange={(e) => setCredencial(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              resolverCredencial(credencial);
-            }
-          }}
-        />
-        {errorCredencial && <p className="text-sm text-red-400 mt-1">{errorCredencial}</p>}
-      </Campo>
+      <CampoCredencial
+        label="Escanea la credencial de quien devuelve"
+        valor={credencial}
+        onChange={setCredencial}
+        onCapturar={resolverCredencial}
+        error={errorCredencial}
+        autoFocus
+      />
 
       {confirmadoNombre && (
         <div

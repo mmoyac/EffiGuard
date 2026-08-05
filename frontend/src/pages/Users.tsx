@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "react-query";
-import { Users as UsersIcon, UserPlus, UserCheck, UserX, Shield, Pencil, RefreshCw, X, Printer, Wifi } from "lucide-react";
+import { Users as UsersIcon, UserPlus, UserCheck, UserX, Shield, Pencil, X, Printer } from "lucide-react";
 import { api } from "../services/api";
 import { LabelPreviewModal } from "../components/LabelPreviewModal";
-import { NFCScanner } from "../components/scanner/NFCScanner";
+import { CampoCredencial } from "../components/credencial/CampoCredencial";
 
 interface UserItem {
   id: number;
@@ -40,15 +40,6 @@ const ROLES: Record<number, { label: string; color: string }> = {
 
 const EMPTY: UserCreate = { rut: "", nombre: "", email: "", password: "", role_id: 4 };
 
-/** Genera un UID corto con prefijo, sin caracteres ambiguos (0/O, 1/I/L) */
-function generateUid(prefix: string): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const array = new Uint8Array(8);
-  crypto.getRandomValues(array);
-  const code = Array.from(array).map((b) => chars[b % chars.length]).join("");
-  return `${prefix}-${code}`;
-}
-
 export function Users() {
   const qc = useQueryClient();
 
@@ -59,10 +50,6 @@ export function Users() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<UserCreate>(EMPTY);
   const [createError, setCreateError] = useState("");
-
-  // --- NFC scanning ---
-  const [nfcCreateOpen, setNfcCreateOpen] = useState(false);
-  const [nfcEditOpen, setNfcEditOpen] = useState(false);
 
   // --- editar ---
   const [editUser, setEditUser] = useState<UserItem | null>(null);
@@ -182,38 +169,15 @@ export function Users() {
               <option value={4}>Operario</option>
             </select>
 
-            {/* Credencial con botón Generar y NFC */}
-            <div className="sm:col-span-2 space-y-1.5">
-              <div className="flex gap-2">
-                <input
-                  placeholder="Credencial RFID/QR o tarjeta Bip! (opcional)"
-                  value={form.uid_credencial ?? ""}
-                  onChange={(e) => setForm({ ...form, uid_credencial: e.target.value || undefined })}
-                  className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 flex-1 font-mono"
-                />
-                <button
-                  type="button"
-                  title="Escanear tarjeta Bip! u otra tarjeta NFC"
-                  onClick={() => setNfcCreateOpen((v) => !v)}
-                  className={`px-3 rounded-xl border transition-colors flex items-center min-h-[44px] ${nfcCreateOpen ? "bg-green-600 border-green-500 text-white" : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"}`}
-                >
-                  <Wifi size={15} />
-                </button>
-                <button
-                  type="button"
-                  title="Generar credencial automática"
-                  onClick={() => { setForm({ ...form, uid_credencial: generateUid("USR") }); setNfcCreateOpen(false); }}
-                  className="px-3 rounded-xl border border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors flex items-center min-h-[44px]"
-                >
-                  <RefreshCw size={15} />
-                </button>
-              </div>
-              {nfcCreateOpen && (
-                <NFCScanner
-                  active={nfcCreateOpen}
-                  onScan={(uid) => { setForm((f) => ({ ...f, uid_credencial: uid })); setNfcCreateOpen(false); }}
-                />
-              )}
+            <div className="sm:col-span-2">
+              <CampoCredencial
+                placeholder="Credencial RFID/QR o tarjeta Bip! (opcional)"
+                valor={form.uid_credencial ?? ""}
+                onChange={(v) => setForm({ ...form, uid_credencial: v || undefined })}
+                onCapturar={(uid) => setForm({ ...form, uid_credencial: uid })}
+                permitirGenerar
+                permitirLimpiar
+              />
             </div>
           </div>
           <p className="text-xs text-gray-500">
@@ -330,50 +294,15 @@ export function Users() {
                 <option value={4}>Operario</option>
               </select>
 
-              {/* Credencial con NFC, Generar y limpiar */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-gray-400">Credencial — tarjeta Bip!, NFC o QR</label>
-                <div className="flex gap-2">
-                  <input
-                    placeholder="Escanea tarjeta o genera código"
-                    value={editForm.uid_credencial}
-                    onChange={(e) => setEditForm({ ...editForm, uid_credencial: e.target.value })}
-                    className="bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 flex-1 font-mono"
-                  />
-                  <button
-                    type="button"
-                    title="Escanear tarjeta Bip! u otra tarjeta NFC"
-                    onClick={() => setNfcEditOpen((v) => !v)}
-                    className={`px-3 rounded-xl border transition-colors flex items-center min-h-[44px] ${nfcEditOpen ? "bg-green-600 border-green-500 text-white" : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"}`}
-                  >
-                    <Wifi size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    title="Generar nueva credencial"
-                    onClick={() => { setEditForm({ ...editForm, uid_credencial: generateUid("USR") }); setNfcEditOpen(false); }}
-                    className="px-3 rounded-xl border border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors flex items-center min-h-[44px]"
-                  >
-                    <RefreshCw size={15} />
-                  </button>
-                  {editForm.uid_credencial && (
-                    <button
-                      type="button"
-                      title="Quitar credencial"
-                      onClick={() => { setEditForm({ ...editForm, uid_credencial: "" }); setNfcEditOpen(false); }}
-                      className="px-3 rounded-xl border border-gray-600 bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-red-400 transition-colors flex items-center min-h-[44px]"
-                    >
-                      <X size={15} />
-                    </button>
-                  )}
-                </div>
-                {nfcEditOpen && (
-                  <NFCScanner
-                    active={nfcEditOpen}
-                    onScan={(uid) => { setEditForm((f) => ({ ...f, uid_credencial: uid })); setNfcEditOpen(false); }}
-                  />
-                )}
-              </div>
+              <CampoCredencial
+                label="Credencial — tarjeta Bip!, NFC o QR"
+                placeholder="Escanea tarjeta o genera código"
+                valor={editForm.uid_credencial}
+                onChange={(v) => setEditForm({ ...editForm, uid_credencial: v })}
+                onCapturar={(uid) => setEditForm({ ...editForm, uid_credencial: uid })}
+                permitirGenerar
+                permitirLimpiar
+              />
 
               {/* Contraseña opcional */}
               <div className="space-y-1">

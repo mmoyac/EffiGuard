@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { UserCheck } from "lucide-react";
 import { ROL_OPERARIO, catalogoApi, projectsApi, usersApi } from "../../services/api";
+import { CampoCredencial } from "../credencial/CampoCredencial";
 import { BTN, Campo, INPUT, Modal, mensajeError, type Variante } from "./shared";
 
 /**
@@ -78,22 +79,14 @@ export function ModalEntrega({ v, onClose }: { v: Variante; onClose: () => void 
       subtitulo={`${v.producto_nombre} · ${v.nombre}`}
       onClose={onClose}
     >
-      <Campo label="Escanea la credencial del operario">
-        <input
-          className={`${INPUT} font-mono`}
-          placeholder="Acerca la credencial o el QR…"
-          autoFocus
-          value={credencial}
-          onChange={(e) => setCredencial(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              resolverCredencial(credencial);
-            }
-          }}
-        />
-        {errorCredencial && <p className="text-sm text-red-400 mt-1">{errorCredencial}</p>}
-      </Campo>
+      <CampoCredencial
+        label="Escanea la credencial del operario"
+        valor={credencial}
+        onChange={setCredencial}
+        onCapturar={resolverCredencial}
+        error={errorCredencial}
+        autoFocus
+      />
 
       {operarioNombre && (
         <div className="bg-green-500/10 border border-green-500/30 rounded-xl px-3 py-2.5 flex items-center gap-2">
