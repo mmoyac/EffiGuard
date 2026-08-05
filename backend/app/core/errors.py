@@ -23,3 +23,14 @@ def error_usuario_duplicado(e: IntegrityError, por_defecto: str) -> HTTPExceptio
         if columna in err:
             return HTTPException(status_code=400, detail=mensaje)
     return HTTPException(status_code=400, detail=por_defecto)
+
+
+def error_credencial_ocupada(nombre: str) -> HTTPException:
+    """El 400 que nombra a quien ya tiene la credencial.
+
+    Nombrarlo es la diferencia entre un error accionable y uno que obliga a ir a
+    la base: el administrador busca ese nombre en su lista y le quita la tarjeta.
+    Sólo es seguro porque el portador se busca dentro del tenant — uno global
+    nombraría a alguien de otra empresa, que el administrador no puede ver.
+    """
+    return HTTPException(status_code=400, detail=f"Esa credencial ya la tiene {nombre}")

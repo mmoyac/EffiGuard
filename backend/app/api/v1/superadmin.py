@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 import sqlalchemy as sa
 
 from app.core.dependencies import DBSession
-from app.core.errors import error_usuario_duplicado
+from app.core.errors import error_credencial_ocupada, error_usuario_duplicado
 from app.core.security import hash_password
 from app.core.superadmin import SuperAdminToken, ActingTenantId
 from app.services import pwa_icons
@@ -25,6 +25,7 @@ from app.models.asset_state import AssetState
 from app.models.module import Module
 from app.models.menu_item import MenuItem
 from app.models.role_menu_permission import RoleMenuPermission
+from app.repositories.user import UserRepository
 
 router = APIRouter(prefix="/admin", tags=["SuperAdmin"])
 
@@ -263,6 +264,15 @@ async def list_all_users(
 
 @router.post("/users", response_model=GlobalUserResponse, status_code=status.HTTP_201_CREATED)
 async def create_global_user(data: GlobalUserCreate, token: SuperAdminToken, session: DBSession):
+    # Contra el tenant del usuario creado, no el del Super Admin: él no pertenece
+    # a la empresa que administra, así que su tenant compararía contra la
+    # equivocada — dejaría pasar un duplicado real y rechazaría uno legítimo.
+    if data.uid_credencial:
+        portador = await UserRepository(session, data.tenant_id).portador_de_credencial(
+            data.uid_credencial
+        )
+        if portador:
+            raise error_credencial_ocupada(portador.nombre)
     user = User(
         tenant_id=data.tenant_id,
         rut=data.rut,
@@ -290,6 +300,12 @@ async def update_global_user(user_id: int, data: GlobalUserUpdate, token: SuperA
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     fields = data.model_dump(exclude_none=True)
     password = fields.pop("password", None)
+    if fields.get("uid_credencial"):
+        portador = await UserRepository(session, user.tenant_id).portador_de_credencial(
+            fields["uid_credencial"], excluir_id=user.id
+        )
+        if portador:
+            raise error_credencial_ocupada(portador.nombre)
     for k, v in fields.items():
         setattr(user, k, v)
     if password:

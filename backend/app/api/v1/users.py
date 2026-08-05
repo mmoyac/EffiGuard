@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from app.core.dependencies import CurrentToken, DBSession
-from app.core.errors import error_usuario_duplicado
+from app.core.errors import error_credencial_ocupada, error_usuario_duplicado
 from app.core.security import hash_password
 from app.repositories.user import UserRepository
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
@@ -33,6 +33,10 @@ async def list_users(
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(data: UserCreate, token: CurrentToken, session: DBSession):
     repo = UserRepository(session, token.tenant_id)
+    if data.uid_credencial:
+        portador = await repo.portador_de_credencial(data.uid_credencial)
+        if portador:
+            raise error_credencial_ocupada(portador.nombre)
     try:
         return await repo.create(
             rut=data.rut,
@@ -43,6 +47,8 @@ async def create_user(data: UserCreate, token: CurrentToken, session: DBSession)
             uid_credencial=data.uid_credencial,
         )
     except IntegrityError as e:
+        # Red ante dos guardados simultáneos: entre la consulta de arriba y este
+        # commit cabe otro que se lleve la misma credencial.
         raise error_usuario_duplicado(e, "Error al crear usuario")
 
 
@@ -74,6 +80,12 @@ async def update_user(user_id: int, data: UserUpdate, token: CurrentToken, sessi
     update_data = data.model_dump(exclude_none=True)
     if "password" in update_data:
         update_data["password_hash"] = hash_password(update_data.pop("password"))
+    if update_data.get("uid_credencial"):
+        portador = await repo.portador_de_credencial(
+            update_data["uid_credencial"], excluir_id=user.id
+        )
+        if portador:
+            raise error_credencial_ocupada(portador.nombre)
     try:
         return await repo.update(user, **update_data)
     except IntegrityError as e:
