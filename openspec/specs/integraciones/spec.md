@@ -3,9 +3,7 @@
 ## Purpose
 
 Exponer datos de bodega a agentes y automatizaciones externas (n8n) mediante autenticación por API key, y ofrecer un asistente conversacional dentro de la aplicación.
-
 ## Requirements
-
 ### Requirement: Autenticación por API key
 
 El sistema SHALL aceptar autenticación mediante la cabecera `X-API-Key` para los endpoints destinados a integraciones. La key resuelve el tenant sobre el que opera la petición.
@@ -41,22 +39,37 @@ Un administrador del tenant (`role_id <= 2`) SHALL poder crear, listar y revocar
 
 ### Requirement: Consulta de disponibilidad para agentes
 
-`GET /api/v1/assets/query?q=<texto>` SHALL buscar activos raíz del tenant cuyo nombre contenga el texto, con respuesta adaptada al comportamiento de cada uno.
+`GET /api/v1/assets/query?q=<texto>` SHALL buscar variantes del tenant cuyo nombre de producto o de variante contenga el texto, con respuesta adaptada al comportamiento de su familia.
 
 #### Scenario: Consulta de una herramienta
 
-- **WHEN** el activo encontrado es prestable
-- **THEN** la respuesta incluye su estado, el operario que lo tiene (si hay préstamo abierto) y la fecha de préstamo formateada como `dd/mm/aaaa hh:mm`
+- **WHEN** la variante encontrada es prestable
+- **THEN** la respuesta incluye `unidades_total`, `unidades_disponibles` y el detalle de las unidades prestadas con su operario y fecha de préstamo formateada como `dd/mm/aaaa hh:mm`
 
 #### Scenario: Consulta de un consumible
 
-- **WHEN** el activo encontrado es consumible
+- **WHEN** la variante encontrada es consumible
 - **THEN** la respuesta incluye `stock_actual`, `stock_minimo` y el indicador `bajo_stock`
 
-#### Scenario: Hijos de kit excluidos
+#### Scenario: Coincidencia por nombre de producto
 
-- **WHEN** la búsqueda coincide con activos hijos de un kit
-- **THEN** se excluyen del resultado, devolviendo sólo activos raíz
+- **WHEN** el texto coincide con el nombre del producto y éste tiene tres variantes
+- **THEN** se devuelven las tres, cada una con su propia disponibilidad, agrupadas bajo el nombre del producto
+
+#### Scenario: Unidades hijas de kit excluidas
+
+- **WHEN** hay un kit prestado, con un préstamo por cada pieza
+- **THEN** `prestadas_a` lista sólo la unidad raíz, para no repetir al mismo operario una vez por pieza de una única entrega
+
+#### Scenario: Campos siempre presentes
+
+- **WHEN** el agente recibe cualquier resultado
+- **THEN** todos los campos vienen, y los que no aplican al comportamiento llegan en cero o vacíos, para que el consumidor no tenga que ramificar según el tipo antes de leer
+
+#### Scenario: Búsqueda por código
+
+- **WHEN** el texto enviado corresponde exactamente a un código registrado
+- **THEN** se devuelve la variante o unidad dueña de ese código, para que el agente pueda responder por número de parte de proveedor
 
 ### Requirement: Asistente conversacional de bodega
 
@@ -71,3 +84,4 @@ La aplicación SHALL incluir un widget de chat que envía los mensajes a un webh
 
 - **WHEN** la aplicación corre en modo dev
 - **THEN** el chat apunta al proxy local `/n8n-webhook/...` en vez del host de producción
+

@@ -3,21 +3,10 @@
 ## Purpose
 
 Modelar los bienes del tenant —herramientas prestables y consumibles de stock— con un identificador físico único, familias parametrizables por el cliente, soporte de kits padre-hijo y carga masiva vía Excel.
-
 ## Requirements
-
-### Requirement: Activo identificado por UID físico único
-
-Cada activo SHALL tener un `uid_fisico` único en todo el sistema, correspondiente a su código QR o tag RFID.
-
-#### Scenario: Alta con UID ya existente
-
-- **WHEN** se intenta crear un activo con un `uid_fisico` ya registrado
-- **THEN** responde 409 con "Ya existe un activo con el código '<uid>'"
-
 ### Requirement: Comportamiento derivado de la familia
 
-El comportamiento operativo de un activo SHALL determinarse por su familia (`asset_families.comportamiento`), con dos valores válidos: `prestable` (requiere préstamo y devolución) y `consumible` (sólo descuenta stock). Un activo no declara su tipo directamente.
+El comportamiento operativo SHALL determinarse por la familia (`asset_families.comportamiento`), con dos valores válidos: `prestable` (requiere préstamo y devolución) y `consumible` (sólo descuenta stock). La familia SHALL asignarse al **producto**, y sus variantes y unidades SHALL heredarla. Ningún nivel de la jerarquía declara su tipo directamente.
 
 #### Scenario: Creación de familia con comportamiento inválido
 
@@ -34,109 +23,225 @@ El comportamiento operativo de un activo SHALL determinarse por su familia (`ass
 - **WHEN** el Super Admin crea un tenant
 - **THEN** se siembran dos familias: "Herramienta" (prestable, blue) y "Consumible" (consumible, orange)
 
+#### Scenario: Herencia hacia variantes y unidades
+
+- **WHEN** se consulta una variante o una unidad
+- **THEN** la respuesta incluye el comportamiento y el color de la familia de su producto
+
+#### Scenario: Cambio de familia con unidades existentes
+
+- **WHEN** se cambia la familia de un producto de `prestable` a `consumible` y alguna de sus variantes tiene unidades
+- **THEN** responde 409 con "No se puede cambiar a consumible: el producto tiene N unidad(es)"
+
 ### Requirement: Familia no eliminable con activos asignados
 
-Una familia SHALL poder eliminarse sólo si ningún activo la referencia.
+Una familia SHALL poder eliminarse sólo si ningún **producto** la referencia.
 
 #### Scenario: Intento de borrar familia en uso
 
-- **WHEN** se elimina una familia con N activos asignados
-- **THEN** responde 409 con "No se puede eliminar: la familia tiene N activo(s) asignado(s)"
+- **WHEN** se elimina una familia con N productos asignados
+- **THEN** responde 409 con "No se puede eliminar: la familia tiene N producto(s) asignado(s)"
 
 ### Requirement: Estados de activo
 
-Todo activo SHALL tener un estado del catálogo global, con IDs estables usados por la lógica de negocio: 1 Disponible, 2 En Terreno, 3 En Reparación, 4 Robado.
+Toda **unidad** SHALL tener un estado del catálogo global, con IDs estables usados por la lógica de negocio: 1 Disponible, 2 En Terreno, 3 En Reparación, 4 Robado. Las variantes consumibles NO SHALL tener estado: su condición operativa es su stock.
 
-#### Scenario: Activo en estado no operable
+#### Scenario: Unidad en estado no operable
 
-- **WHEN** se escanea un activo cuyo estado no es Disponible, En Terreno ni En Reparación
+- **WHEN** se escanea una unidad cuyo estado no es Disponible, En Terreno ni En Reparación
 - **THEN** la interfaz muestra "No disponible para operar" y no ofrece acción principal
+
+#### Scenario: Consumible sin estado
+
+- **WHEN** se consulta una variante consumible
+- **THEN** la respuesta no incluye estado y la interfaz muestra su stock en ese lugar
 
 ### Requirement: Kits padre-hijo
 
-Un activo SHALL poder tener hijos mediante `parent_asset_id`, formando un kit. El padre es el activo con `parent_asset_id IS NULL` que tiene hijos vinculados.
+Una **unidad** SHALL poder tener hijas mediante `parent_unidad_id`, formando un kit. La unidad padre es la que tiene `parent_unidad_id IS NULL` y unidades hijas vinculadas. Las variantes consumibles NO SHALL participar en kits.
 
-#### Scenario: Consulta de un activo padre
+#### Scenario: Consulta de una unidad padre
 
-- **WHEN** se obtiene un activo raíz
-- **THEN** la respuesta incluye la colección de sus hijos
+- **WHEN** se obtiene una unidad raíz
+- **THEN** la respuesta incluye la colección de sus unidades hijas
+
+#### Scenario: Intento de armar un kit con un consumible
+
+- **WHEN** se asigna como hija de un kit una variante consumible
+- **THEN** responde 400 con "Sólo las unidades prestables pueden formar kits"
 
 ### Requirement: Límite de días de préstamo con herencia
 
-El límite de días de préstamo SHALL resolverse con precedencia: `assets.dias_max_prestamo` si está definido, si no `asset_families.dias_max_prestamo`, y si ambos son nulos el activo no tiene límite.
+El límite de días de préstamo SHALL resolverse con precedencia: `variantes.dias_max_prestamo` si está definido, si no `asset_families.dias_max_prestamo` de la familia de su producto, y si ambos son nulos la unidad no tiene límite.
 
-#### Scenario: Activo sin límite propio
+#### Scenario: Variante sin límite propio
 
-- **WHEN** el activo tiene `dias_max_prestamo = NULL` y su familia define 7 días
-- **THEN** el límite efectivo del activo es 7 días
+- **WHEN** la variante tiene `dias_max_prestamo = NULL` y su familia define 7 días
+- **THEN** el límite efectivo de sus unidades es 7 días
 
-#### Scenario: Activo y familia sin límite
+#### Scenario: Variante y familia sin límite
 
 - **WHEN** ambos valores son nulos
-- **THEN** el activo nunca se reporta como vencido
+- **THEN** los préstamos de esas unidades nunca se reportan como vencidos
 
 ### Requirement: Catálogo de marcas y modelos
 
-El tenant SHALL poder mantener marcas y modelos propios (`brands`, `models`), con el modelo opcional en el activo.
+El tenant SHALL poder mantener marcas propias (`brands`), referenciables de forma opcional desde un producto. El concepto de "modelo" SHALL corresponder al producto: un producto de familia prestable *es* un modelo de herramienta.
 
-#### Scenario: Listado de modelos por marca
+#### Scenario: Listado de productos por marca
 
-- **WHEN** se consulta `GET /api/v1/catalog/models?brand_id=N`
-- **THEN** devuelve sólo los modelos de esa marca dentro del tenant
+- **WHEN** se consulta `GET /api/v1/catalog/productos?brand_id=N`
+- **THEN** devuelve sólo los productos de esa marca dentro del tenant
 
-### Requirement: Eliminación de activo bloqueada por préstamo activo
+#### Scenario: Producto sin marca
 
-Un activo SHALL poder eliminarse sólo si no tiene préstamos abiertos. Al eliminarlo se borran en cascada sus logs de inventario y sus préstamos históricos.
-
-#### Scenario: Borrado con préstamo abierto
-
-- **WHEN** se elimina un activo con un préstamo sin `fecha_devolucion_real`
-- **THEN** responde 409 con "No se puede eliminar: el activo tiene un préstamo activo"
+- **WHEN** se crea un consumible sin declarar marca
+- **THEN** el producto se crea con `brand_id` nulo y aparece normalmente en los listados
 
 ### Requirement: Importación masiva desde Excel
 
-El sistema SHALL permitir crear y actualizar activos desde un archivo `.xlsx` con las columnas `uid_fisico`, `nombre`, `familia`, `estado`, `stock_actual`, `stock_minimo`, `valor_reposicion`, `dias_max_prestamo`, `proxima_mantencion`, usando `uid_fisico` como clave de upsert.
+El sistema SHALL permitir crear y actualizar catálogo desde un archivo `.xlsx` con las columnas `producto`, `variante`, `familia`, `marca`, `unidad`, `stock_actual`, `stock_minimo`, `precio_compra`, `valor_reposicion`, `dias_max_prestamo`, `codigos`, `cantidad_unidades` y `ubicacion`.
 
-#### Scenario: Fila sin uid_fisico
+La columna `codigos` acepta una lista separada por `;`, cada entrada con formato `codigo[:tipo[:factor[:proveedor]]]`. El proveedor se referencia por nombre y SHALL crearse en el catálogo del tenant si no existe, con el mismo criterio que `familia` y `ubicacion`.
 
-- **WHEN** una fila viene con `uid_fisico` vacío
-- **THEN** se crea un activo nuevo con un UID autogenerado con formato `EFG-XXXXXXXX`
+El **tipo de cada código SHALL determinar a qué nivel se asocia**, sin necesidad de una columna aparte: `fabricante`, `proveedor` y `empaque` cuelgan de la variante; `serie_fabrica` y, en filas prestables, `propio`, cuelgan de la unidad que crea la fila.
 
-#### Scenario: UID existente del mismo tenant
+La clave de upsert SHALL depender del comportamiento: el par (`producto`, `variante`) para filas consumibles, y la terna (`producto`, `variante`, primer código **de nivel unidad**) para filas prestables que declaran códigos de ese nivel, de modo que cada fila represente un ejemplar.
 
-- **WHEN** el `uid_fisico` ya pertenece a un activo del tenant
-- **THEN** el activo se actualiza con los valores de la fila
+#### Scenario: Fila sin variante
 
-#### Scenario: UID perteneciente a otro tenant
+- **WHEN** una fila trae `producto` pero deja `variante` vacía
+- **THEN** se crea el producto con una variante homónima, igual que en el alta por formulario
 
-- **WHEN** el `uid_fisico` existe pero es de otro tenant
-- **THEN** la fila se rechaza con el motivo "uid_fisico '<uid>' pertenece a otro tenant" y el resto del archivo continúa procesándose
+#### Scenario: Par producto-variante existente
+
+- **WHEN** el par (`producto`, `variante`) de una fila consumible ya existe en el tenant
+- **THEN** la variante se actualiza con los valores de la fila y sus códigos se agregan sin borrar los previos
+
+#### Scenario: Varias filas del mismo producto
+
+- **WHEN** tres filas comparten `producto` y difieren en `variante`
+- **THEN** se crea un solo producto con tres variantes
+
+#### Scenario: Código con proveedor
+
+- **WHEN** una fila declara `7801234567890:proveedor:1:Sodimac` y el tenant no tiene ese proveedor
+- **THEN** se crea el proveedor "Sodimac" y el código queda asociado a él
+
+#### Scenario: Código ya usado por otro item
+
+- **WHEN** una fila declara un código que ya pertenece a otra variante o unidad del tenant
+- **THEN** la fila se rechaza con "el código '<codigo>' ya está registrado en otro item" y el resto del archivo continúa procesándose
+
+#### Scenario: Alta de ejemplares por cantidad
+
+- **WHEN** una fila de familia prestable declara `cantidad_unidades = 200` y crea la variante
+- **THEN** se crean 200 unidades en estado Disponible con código principal autogenerado
+
+#### Scenario: Alta por cantidad con EAN del modelo
+
+- **WHEN** una fila prestable declara `cantidad_unidades = 3` y un código de tipo `fabricante`
+- **THEN** el EAN se registra una vez en la variante y se crean las 3 unidades con su código autogenerado, porque los dos datos viven en niveles distintos y no se contradicen
+
+#### Scenario: Alta de ejemplares ya etiquetados
+
+- **WHEN** varias filas comparten `producto` y `variante` de familia prestable y cada una declara un código `propio` distinto
+- **THEN** cada fila crea una unidad con ese código como principal, bajo una única variante
+
+#### Scenario: EAN del modelo repetido en varias filas
+
+- **WHEN** tres filas del mismo modelo declaran el mismo código de tipo `fabricante`
+- **THEN** el código se registra una sola vez en la variante y las repeticiones se ignoran sin error, porque apuntan al item que ya lo tiene
+
+#### Scenario: Cantidad y códigos de unidad a la vez
+
+- **WHEN** una fila prestable declara `cantidad_unidades` junto con un código de nivel unidad (`propio` o `serie_fabrica`)
+- **THEN** la fila se rechaza con "Declare cantidad_unidades o los códigos del ejemplar, no ambos"
+
+#### Scenario: Cantidad de unidades sobre una variante existente
+
+- **WHEN** una fila declara `cantidad_unidades` y su variante ya existe
+- **THEN** la columna se ignora, se informa como advertencia y las unidades no se duplican
+
+#### Scenario: Cantidad de unidades en una fila consumible
+
+- **WHEN** una fila de familia consumible declara `cantidad_unidades`
+- **THEN** la fila se rechaza con "cantidad_unidades sólo aplica a familias prestables"
 
 #### Scenario: Validación previa sin escribir
 
 - **WHEN** se importa con `dry_run=true`
-- **THEN** devuelve el conteo de filas válidas para crear y actualizar más la lista de errores por fila, sin modificar la base de datos
+- **THEN** devuelve el conteo de productos, variantes y unidades a crear y actualizar, los ajustes de stock que se aplicarían y la lista de errores y advertencias por fila, sin modificar la base de datos
 
 #### Scenario: Errores de datos por fila
 
-- **WHEN** una fila omite `nombre` o `familia`, referencia una familia inexistente, un estado inválido o un número/fecha mal formados
+- **WHEN** una fila omite `producto` o `familia`, referencia una familia inexistente, una ubicación inexistente o un número mal formado
 - **THEN** se acumula un error con el número de fila y el motivo, y esa fila se omite
 
 #### Scenario: Descarga del template
 
-- **WHEN** el tenant ya tiene activos y solicita el template
-- **THEN** recibe un Excel con sus activos raíz precargados para editar y reimportar; si no tiene activos, recibe el template vacío con filas de ejemplo
+- **WHEN** el tenant ya tiene catálogo y solicita el template
+- **THEN** recibe un Excel con una fila por variante existente, con `stock_actual` y `cantidad_unidades` **vacías**, para editar y reimportar sin riesgo de pisar inventario; si no tiene catálogo, recibe el template vacío con filas de ejemplo
 
 ### Requirement: Listado y consulta de activos
 
-El sistema SHALL exponer listado paginado con filtro opcional por comportamiento, consulta por ID, y listado de consumibles bajo stock mínimo.
+El sistema SHALL exponer listado paginado de **variantes** con filtro opcional por comportamiento, producto y atributo; consulta de una variante por ID con sus códigos y sus unidades; y listado de variantes bajo stock mínimo.
 
 #### Scenario: Filtro por comportamiento
 
 - **WHEN** se lista con `?comportamiento=consumible`
-- **THEN** devuelve sólo activos cuya familia tiene ese comportamiento
+- **THEN** devuelve sólo variantes cuyo producto pertenece a una familia con ese comportamiento
 
 #### Scenario: Consulta de bajo stock
 
-- **WHEN** se consulta `GET /api/v1/assets/low-stock`
-- **THEN** devuelve los consumibles con `stock_actual <= stock_minimo`
+- **WHEN** se consulta `GET /api/v1/variantes/low-stock`
+- **THEN** devuelve las variantes cuyo stock efectivo es menor o igual a su `stock_minimo`, excluyendo las que tienen `stock_minimo` en 0
+
+#### Scenario: Detalle de una variante prestable
+
+- **WHEN** se consulta una variante de familia prestable
+- **THEN** la respuesta incluye sus códigos, sus unidades con estado y ubicación, y los conteos total y disponible
+
+### Requirement: Celda vacía en la importación nunca borra
+
+Una celda vacía en una fila que **actualiza** un item existente SHALL dejar el valor vigente intacto. Ninguna columna de la importación SHALL interpretarse como orden de borrado. Borrar un valor SHALL hacerse desde la interfaz, no dejando una celda en blanco.
+
+#### Scenario: Reimportación parcial
+
+- **WHEN** se reimporta una planilla con sólo las columnas `producto`, `variante` y `precio_compra`
+- **THEN** se actualiza el precio y se conservan marca, unidad, mínimos, ubicación, códigos y stock
+
+#### Scenario: Celda vaciada a propósito
+
+- **WHEN** una fila deja `dias_max_prestamo` vacío sobre una variante que tenía 7
+- **THEN** la variante conserva sus 7 días, y el cambio a "sin límite" se hace desde la interfaz
+
+#### Scenario: Alta con celdas vacías
+
+- **WHEN** una fila **crea** una variante dejando columnas opcionales vacías
+- **THEN** esas columnas quedan nulas, porque no hay valor previo que conservar
+
+### Requirement: La importación nunca escribe stock en silencio
+
+La importación NO SHALL escribir `stock_actual` directamente sobre una variante existente. Un `stock_actual` declarado SHALL traducirse siempre en un movimiento registrado en `inventory_logs`: un log de apertura al crear la variante, y un `ajuste` cuando difiere del stock vigente. Una celda vacía SHALL dejar el stock intacto.
+
+#### Scenario: Saldo de apertura
+
+- **WHEN** una fila crea una variante consumible con `stock_actual = 500`
+- **THEN** la variante queda con 500 y se registra un log tipo `ajuste` con la observación "Saldo de apertura: importación Excel", para que la bitácora arranque cuadrada
+
+#### Scenario: Reimportación con stock distinto al vigente
+
+- **WHEN** una fila actualiza una variante cuyo stock vigente es 1170 y declara `stock_actual = 1200`
+- **THEN** el stock queda en 1200 y se registra un log tipo `ajuste` con la observación "Ajuste: 1170 → 1200, importación Excel"
+
+#### Scenario: Reimportación sin tocar el stock
+
+- **WHEN** una fila actualiza una variante y deja `stock_actual` vacío
+- **THEN** el stock no se modifica y no se genera ningún movimiento
+
+#### Scenario: Stock declarado sobre una variante prestable
+
+- **WHEN** una fila de familia prestable declara `stock_actual`
+- **THEN** la columna se ignora, porque el stock de una herramienta se deriva de sus unidades
+
