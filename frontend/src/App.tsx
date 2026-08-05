@@ -4,6 +4,7 @@ import { useAuthStore } from "./stores/authStore";
 import { authApi } from "./services/api";
 import { usePWAManifest } from "./hooks/usePWAManifest";
 import { Layout } from "./components/layout/Layout";
+import { PWAUpdatePrompt } from "./components/PWAUpdatePrompt";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Catalogo } from "./pages/Catalogo";
@@ -46,35 +47,38 @@ export default function App() {
   }, []);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={
-            <PrivateRoute>
-              <Layout />
-            </PrivateRoute>
-          }
-        >
-          <Route index element={<HomeRedirect />} />
-          <Route path="catalogo" element={<Catalogo />} />
-          <Route path="catalogo/scan" element={<EscanearCatalogo />} />
-          <Route path="proveedores" element={<Proveedores />} />
-          <Route path="loans" element={<Loans />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="my-loans" element={<MyLoans />} />
-          <Route path="users" element={<Users />} />
-          <Route path="projects" element={<Projects />} />
-          <Route path="ubicaciones" element={<Ubicaciones />} />
-          <Route path="admin/tenants" element={<AdminTenants />} />
-          <Route path="admin/users" element={<AdminUsers />} />
-          <Route path="admin/asset-states" element={<AdminAssetStates />} />
-          <Route path="admin/modules" element={<AdminModules />} />
-          <Route path="admin/menu-items" element={<AdminMenuItems />} />
-          <Route path="admin/permissions" element={<AdminPermissions />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <>
+      <PWAUpdatePrompt />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/"
+            element={
+              <PrivateRoute>
+                <Layout />
+              </PrivateRoute>
+            }
+          >
+            <Route index element={<HomeRedirect />} />
+            <Route path="catalogo" element={<Catalogo />} />
+            <Route path="catalogo/scan" element={<EscanearCatalogo />} />
+            <Route path="proveedores" element={<Proveedores />} />
+            <Route path="loans" element={<Loans />} />
+            <Route path="inventory" element={<Inventory />} />
+            <Route path="my-loans" element={<MyLoans />} />
+            <Route path="users" element={<Users />} />
+            <Route path="projects" element={<Projects />} />
+            <Route path="ubicaciones" element={<Ubicaciones />} />
+            <Route path="admin/tenants" element={<AdminTenants />} />
+            <Route path="admin/users" element={<AdminUsers />} />
+            <Route path="admin/asset-states" element={<AdminAssetStates />} />
+            <Route path="admin/modules" element={<AdminModules />} />
+            <Route path="admin/menu-items" element={<AdminMenuItems />} />
+            <Route path="admin/permissions" element={<AdminPermissions />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </>
   );
 }

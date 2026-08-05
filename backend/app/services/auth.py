@@ -1,5 +1,3 @@
-import re
-
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,17 +9,10 @@ from app.core.security import (
     decode_token,
     verify_password,
 )
+from app.core.tenant_host import extract_slug as _extract_slug
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse
-
-# effiguard-{slug}.effi4tech.cl  →  grupo 1 = slug
-_SLUG_RE = re.compile(rf"^effiguard-([^.]+)\.{re.escape(settings.BASE_DOMAIN)}(?::\d+)?$")
-
-
-def _extract_slug(host: str) -> str | None:
-    m = _SLUG_RE.match(host)
-    return m.group(1) if m else None
 
 
 async def _resolve_tenant(slug: str, session: AsyncSession) -> Tenant:

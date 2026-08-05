@@ -142,6 +142,17 @@ jobs:
             echo "Revision de base de datos aplicada:"
             docker exec effiguard_backend alembic current
 
+            # Los íconos PWA se derivan al subir el logo, así que los tenants
+            # dados de alta antes de esa función no los tienen. El script es
+            # idempotente: si ya existen, no hace nada.
+            #
+            # No aborta el despliegue si falla: un tenant sin derivados muestra
+            # el ícono genérico de EffiGuard, que es degradación aceptable y no
+            # justifica dejar la app sin desplegar.
+            echo "Generando iconos PWA faltantes..."
+            docker exec effiguard_backend python -m scripts.backfill_pwa_icons \
+              || echo "AVISO: el backfill de iconos fallo; los tenants afectados usaran el icono generico"
+
             echo "Limpiando imagenes antiguas..."
             docker image prune -f
 

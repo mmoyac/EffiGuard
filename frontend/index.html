@@ -4,13 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#111827" />
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- El backend resuelve el tenant por subdominio y devuelve su identidad.
+         Va estático en el HTML, sin JS de por medio, para que el ícono correcto
+         esté disponible en la primera carga: el prompt de instalación aparece
+         antes de que exista sesión. -->
+    <link rel="manifest" href="/api/v1/pwa/manifest" />
 
     <!-- PWA: iOS Safari -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="EffiGuard" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <!-- iOS ignora el manifiesto para el ícono; redirige al derivado del tenant. -->
+    <link rel="apple-touch-icon" href="/api/v1/pwa/apple-touch-icon" />
 
     <title>EffiGuard</title>
   </head>

@@ -6,38 +6,27 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
-      // Manifest base (fallback para usuarios no autenticados).
-      // usePWAManifest() lo reemplaza dinámicamente tras el login.
-      manifest: {
-        name: "EffiGuard",
-        short_name: "EffiGuard",
-        description: "Gestión de activos y control de bodega",
-        theme_color: "#111827",
-        background_color: "#111827",
-        display: "standalone",
-        orientation: "portrait",
-        start_url: "/",
-        scope: "/",
-        icons: [
-          {
-            src: "/icons/icon-192.png",
-            sizes: "192x192",
-            type: "image/png",
-            purpose: "any maskable",
-          },
-          {
-            src: "/icons/icon-512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "any maskable",
-          },
-        ],
-      },
+      // "prompt": el SW nuevo se queda en waiting hasta que el usuario acepta
+      // desde <PWAUpdatePrompt>. Con "autoUpdate" + skipWaiting el SW nuevo
+      // tomaba control de una pestaña que seguía ejecutando el bundle viejo.
+      registerType: "prompt",
+      // Registramos desde React para poder mostrar el aviso de actualización.
+      injectRegister: null,
+      // El manifiesto lo sirve el backend en /api/v1/pwa/manifest, resuelto por
+      // subdominio. Si el plugin generase el suyo, inyectaría un segundo
+      // <link rel="manifest"> en index.html y el navegador honra el primero que
+      // encuentra: una carrera silenciosa por cuál identidad gana.
+      manifest: false,
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
-        skipWaiting: true,
-        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        // El SW responde las navegaciones con index.html; sin esta lista
+        // también se tragaba /docs y /static, que los sirve el backend.
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/static\//,
+          /^\/(docs|redoc|openapi\.json)/,
+        ],
       },
     }),
   ],

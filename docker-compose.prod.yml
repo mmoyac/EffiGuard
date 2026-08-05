@@ -60,6 +60,12 @@ services:
       ENVIRONMENT: production
       BASE_DOMAIN: effi4tech.cl
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+    # El despliegue hace `up --force-recreate`, que destruye el filesystem del
+    # contenedor. Sin este volumen, los logos que sube el Super Admin se perdían
+    # en cada deploy: `tenants.logo_url` seguía en la base apuntando a un archivo
+    # que ya no existía. Aquí viven también los íconos PWA derivados de esos logos.
+    volumes:
+      - backend_static:/app/static
     networks:
       - internal
     logging:
@@ -173,6 +179,8 @@ services:
 
 volumes:
   postgres_data:
+  # Logos de tenants e íconos PWA derivados. Deben sobrevivir al recreate.
+  backend_static:
 
 networks:
   internal:

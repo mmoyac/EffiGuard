@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from app.core.dependencies import DBSession
 from app.core.security import hash_password
 from app.core.superadmin import SuperAdminToken, ActingTenantId
+from app.services import pwa_icons
 
 from app.models.asset_family import AssetFamily
 from app.models.tenant import Tenant
@@ -221,12 +222,21 @@ async def upload_tenant_logo(
     with open(dest, "wb") as f:
         f.write(content)
 
-    # Eliminar logo anterior si existía
+    # Eliminar logo anterior y sus derivados PWA si existían
     if tenant.logo_url:
         old_filename = tenant.logo_url.split("/")[-1]
         old_path = os.path.join(_LOGOS_DIR, old_filename)
         if os.path.exists(old_path):
+            try:
+                old_hash = pwa_icons.hash_logo(old_path)
+                pwa_icons.eliminar_derivados(tenant.slug, old_hash)
+            except OSError:
+                pass  # el logo anterior queda huérfano, no vale fallar la carga
             os.remove(old_path)
+
+    # Los derivados son mejor-esfuerzo: si no se pueden generar (SVG, por
+    # ejemplo) el tenant conserva los íconos genéricos y la carga igual vale.
+    pwa_icons.generar_derivados(dest, tenant.slug)
 
     tenant.logo_url = f"/static/logos/{filename}"
     await session.commit()

@@ -1,35 +1,29 @@
 import { useEffect } from "react";
 import { useAuthStore } from "../stores/authStore";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
-
 /**
- * Actualiza dinámicamente el Web App Manifest y los meta tags de iOS
- * cada vez que cambia el tenant del usuario autenticado.
+ * Ajusta el título de la pestaña al tenant de la sesión.
  *
- * - Android (Chrome): el browser re-fetch del manifest nuevo y muestra
- *   el nombre del tenant en la pantalla de instalación y en el home screen.
- * - iOS (Safari): lee apple-mobile-web-app-title para el label del ícono.
+ * El manifiesto PWA ya NO se toca desde aquí: lo sirve el backend en
+ * /api/v1/pwa/manifest resolviendo el tenant por subdominio, y el <link> es
+ * estático en index.html. Reemplazarlo tras el login llegaba tarde — el
+ * navegador lee el manifiesto al cargar la página, y el prompt de instalación
+ * aparece típicamente antes de que exista sesión.
+ *
+ * La identidad se reparte así: la imagen del ícono identifica a la empresa y
+ * el texto dice "EffiGuard". Por eso el label de iOS es fijo y concuerda con
+ * el short_name del manifiesto.
  */
 export function usePWAManifest() {
   const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
     const tenantName = user?.tenant_nombre ?? null;
-    const tenantId = user?.tenant_id ?? null;
 
-    // ── Manifest link ──────────────────────────────────────────────────────
-    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    if (link) {
-      link.href = tenantId
-        ? `${API_BASE}/pwa/manifest/${tenantId}`
-        : "/manifest.webmanifest";
-    }
-
-    // ── <title> ────────────────────────────────────────────────────────────
+    // El título de pestaña sí lleva la empresa: es contexto de escritorio,
+    // no el label del ícono instalado.
     document.title = tenantName ? `EffiGuard · ${tenantName}` : "EffiGuard";
 
-    // ── iOS: apple-mobile-web-app-title ───────────────────────────────────
     let appleMeta = document.querySelector<HTMLMetaElement>(
       'meta[name="apple-mobile-web-app-title"]'
     );
@@ -38,7 +32,6 @@ export function usePWAManifest() {
       appleMeta.name = "apple-mobile-web-app-title";
       document.head.appendChild(appleMeta);
     }
-    // iOS trunca a ~14 chars en el home screen
-    appleMeta.content = tenantName ? tenantName.slice(0, 14) : "EffiGuard";
-  }, [user?.tenant_id, user?.tenant_nombre]);
+    appleMeta.content = "EffiGuard";
+  }, [user?.tenant_nombre]);
 }
