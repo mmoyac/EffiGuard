@@ -20,3 +20,19 @@ class UserRepository(BaseRepository[User]):
             self._base_query().where(User.uid_credencial == uid)
         )
         return result.scalar_one_or_none()
+
+    async def list_by_role(self, role_id: int, offset: int = 0, limit: int = 50) -> list[User]:
+        """Usuarios activos de un rol. Lo usan los selectores de operario.
+
+        Filtra los inactivos: ofrecer a alguien que ya no trabaja en la empresa es
+        entregarle material a nombre de un fantasma.
+        """
+        result = await self.session.execute(
+            self._base_query()
+            .where(User.role_id == role_id)
+            .where(User.is_active.is_(True))
+            .order_by(User.nombre)
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())

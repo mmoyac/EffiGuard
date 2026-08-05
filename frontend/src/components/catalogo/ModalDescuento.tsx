@@ -26,8 +26,8 @@ export function ModalDescuento({
   const [error, setError] = useState("");
 
   const { data: proyectos = [] } = useQuery<{ id: number; nombre: string }[]>(
-    "proyectos-entrega",
-    () => projectsApi.list().then((r) => r.data)
+    "proyectos-activos",
+    () => projectsApi.list(true).then((r) => r.data)
   );
 
   const n = Number(cantidad.replace(",", ".")) || 0;

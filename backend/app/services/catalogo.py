@@ -30,6 +30,8 @@ from app.schemas.catalogo import (
 )
 
 ESTADO_DISPONIBLE = 1
+# El material en terreno lo retira un operario, no un admin ni el bodeguero.
+ROL_OPERARIO = 4
 
 
 # ── Validaciones ─────────────────────────────────────────────────────────────
@@ -507,6 +509,7 @@ async def retirar(
     de una obra vuelve por reintegro, que es otro movimiento, no el cierre de un
     préstamo.
     """
+    from app.models.project import Project
     from app.models.user import User
     from app.repositories.inventory_log import InventoryLogRepository
 
@@ -525,6 +528,27 @@ async def retirar(
     if not operario or operario.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Operario no encontrado"
+        )
+    # Quien retira material en terreno es un operario. Aceptar a cualquier usuario
+    # deja el material entregado a nombre de alguien que nunca lo recibió, y en un
+    # mesón donde se opera con guantes elegir mal de la lista es cuestión de tiempo.
+    if operario.role_id != ROL_OPERARIO:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{operario.nombre} no es operario: el material se entrega a un operario",
+        )
+
+    # La obra es obligatoria, y tiene que estar abierta: imputar consumo a una obra
+    # cerrada contradice que su costo ya se dio por final.
+    proyecto = await session.get(Project, data.project_id)
+    if not proyecto or proyecto.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Proyecto no encontrado"
+        )
+    if not proyecto.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"La obra '{proyecto.nombre}' está cerrada: no admite nuevos despachos",
         )
 
     await VarianteRepository(session, tenant_id).update(

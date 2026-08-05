@@ -22,9 +22,23 @@ class ProjectResponse(BaseModel):
 
 
 @router.get("", response_model=list[ProjectResponse])
-async def list_projects(token: CurrentToken, session: DBSession):
-    repo = BaseRepository(Project, session, token.tenant_id)
-    return await repo.list()
+async def list_projects(
+    token: CurrentToken, session: DBSession, solo_activos: bool = False
+):
+    """Con `solo_activos` devuelve las obras en curso.
+
+    Los selectores operativos —despachar material, prestar una herramienta— no
+    deben ofrecer obras cerradas: imputarles consumo contradice que su costo ya se
+    dio por final. La pantalla de mantención sí las necesita todas, para poder
+    reactivar una que se cerró por error, y por eso el filtro es opcional.
+    """
+    from sqlalchemy import select
+
+    query = select(Project).where(Project.tenant_id == token.tenant_id)
+    if solo_activos:
+        query = query.where(Project.is_active.is_(True))
+    result = await session.execute(query.order_by(Project.nombre))
+    return list(result.scalars().all())
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)

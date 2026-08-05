@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { UserCheck } from "lucide-react";
-import { catalogoApi, projectsApi, usersApi } from "../../services/api";
+import { ROL_OPERARIO, catalogoApi, projectsApi, usersApi } from "../../services/api";
 import { BTN, Campo, INPUT, Modal, mensajeError, type Variante } from "./shared";
 
 /**
@@ -44,12 +44,12 @@ export function ModalEntrega({ v, onClose }: { v: Variante; onClose: () => void 
   }
 
   const { data: usuarios = [] } = useQuery<{ id: number; nombre: string }[]>(
-    "usuarios-entrega",
-    () => usersApi.list().then((r) => r.data.items ?? r.data)
+    "operarios",
+    () => usersApi.list(ROL_OPERARIO).then((r) => r.data.items ?? r.data)
   );
   const { data: proyectos = [] } = useQuery<{ id: number; nombre: string }[]>(
-    "proyectos-entrega",
-    () => projectsApi.list().then((r) => r.data)
+    "proyectos-activos",
+    () => projectsApi.list(true).then((r) => r.data)
   );
 
   const n = Number(cantidad.replace(",", ".")) || 0;
@@ -60,7 +60,7 @@ export function ModalEntrega({ v, onClose }: { v: Variante; onClose: () => void 
       catalogoApi.withdraw(v.id, {
         cantidad: n,
         operario_id: Number(operarioId),
-        ...(projectId ? { project_id: Number(projectId) } : {}),
+        project_id: Number(projectId),
       }),
     {
       onSuccess: () => {
@@ -103,7 +103,7 @@ export function ModalEntrega({ v, onClose }: { v: Variante; onClose: () => void 
       )}
 
       {/* Sin lector, o con la credencial perdida, la lista sigue estando */}
-      <Campo label="…o elígelo de la lista">
+      <Campo label="…o elígelo de la lista de operarios">
         <select
           className={INPUT}
           value={operarioId}
@@ -132,18 +132,24 @@ export function ModalEntrega({ v, onClose }: { v: Variante; onClose: () => void 
         />
       </Campo>
 
-      <Campo label="Proyecto (opcional)">
-        <select className={INPUT} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-          <option value="">— sin proyecto —</option>
-          {proyectos.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nombre}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-gray-500 mt-1">
-          Sin proyecto el consumo no se imputa a ninguna obra.
-        </p>
+      <Campo label="Obra">
+        {proyectos.length === 0 ? (
+          /* Sin obras abiertas no se puede despachar. Decirlo con estas palabras
+             evita que el bodeguero quede mirando un selector vacío sin entender. */
+          <p className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2.5">
+            No hay obras activas. Crea o reactiva una en Proyectos antes de
+            despachar: sin obra el consumo no se imputa a ninguna parte.
+          </p>
+        ) : (
+          <select className={INPUT} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            <option value="">— elegir obra —</option>
+            {proyectos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
+          </select>
+        )}
       </Campo>
 
       <div className="bg-gray-900/50 rounded-xl px-3 py-2.5 text-sm flex justify-between">
@@ -166,7 +172,7 @@ export function ModalEntrega({ v, onClose }: { v: Variante; onClose: () => void 
         </button>
         <button
           onClick={() => entregar.mutate()}
-          disabled={entregar.isLoading || n <= 0 || restante < 0 || !operarioId}
+          disabled={entregar.isLoading || n <= 0 || restante < 0 || !operarioId || !projectId}
           className={`${BTN} flex-1 bg-blue-600 text-white hover:bg-blue-500`}
         >
           {entregar.isLoading ? "Registrando…" : "Entregar"}

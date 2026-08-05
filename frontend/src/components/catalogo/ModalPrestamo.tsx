@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { UserCheck } from "lucide-react";
-import { loansApi, projectsApi, usersApi } from "../../services/api";
+import { ROL_OPERARIO, loansApi, projectsApi, usersApi } from "../../services/api";
 import { BTN, Campo, INPUT, Modal, mensajeError, type Variante } from "./shared";
 
 type Disponible = { id: number; codigo_principal: string | null; ubicacion: string | null };
@@ -54,12 +54,12 @@ export function ModalPrestamo({
   );
 
   const { data: usuarios = [] } = useQuery<{ id: number; nombre: string }[]>(
-    "usuarios-entrega",
-    () => usersApi.list().then((r) => r.data.items ?? r.data)
+    "operarios",
+    () => usersApi.list(ROL_OPERARIO).then((r) => r.data.items ?? r.data)
   );
   const { data: proyectos = [] } = useQuery<{ id: number; nombre: string }[]>(
-    "proyectos-entrega",
-    () => projectsApi.list().then((r) => r.data)
+    "proyectos-activos",
+    () => projectsApi.list(true).then((r) => r.data)
   );
 
   async function resolverCredencial(uid: string) {

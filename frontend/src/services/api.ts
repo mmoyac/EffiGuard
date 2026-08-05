@@ -76,12 +76,18 @@ export const loansApi = {
 };
 
 export const usersApi = {
-  list: () => api.get("/users?limit=200"),
+  list: (roleId?: number) =>
+    api.get(`/users?limit=200${roleId ? `&role_id=${roleId}` : ""}`),
   scanByCredential: (uid: string) => api.get(`/users/scan/${encodeURIComponent(uid)}`),
 };
 
+/** role_id 4. Quien retira material en terreno es un operario. */
+export const ROL_OPERARIO = 4;
+
 export const projectsApi = {
-  list: () => api.get("/projects"),
+  /** `soloActivos` para selectores operativos: una obra cerrada no admite consumo. */
+  list: (soloActivos = false) =>
+    api.get(`/projects${soloActivos ? "?solo_activos=true" : ""}`),
 };
 
 export const ubicacionesApi = {

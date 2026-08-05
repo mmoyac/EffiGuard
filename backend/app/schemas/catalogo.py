@@ -247,11 +247,17 @@ class VariantePurchase(BaseModel):
 
 
 class VarianteWithdraw(BaseModel):
-    """Retiro de consumible. NO crea préstamo: un tornillo no se devuelve."""
+    """Retiro de consumible. NO crea préstamo: un tornillo no se devuelve.
+
+    `project_id` es obligatorio: un retiro sin obra no se imputa a ninguna, y el
+    panel de gasto por proyecto termina contando sólo una parte del material que
+    salió. El material se despachó para algo; ese algo es el dato que hace útil
+    el registro.
+    """
 
     cantidad: Cantidad
     operario_id: int
-    project_id: int | None = None
+    project_id: int
     observaciones: str | None = None
 
 

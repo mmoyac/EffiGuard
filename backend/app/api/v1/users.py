@@ -10,8 +10,22 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 
 @router.get("", response_model=list[UserResponse])
-async def list_users(token: CurrentToken, session: DBSession, skip: int = 0, limit: int = 50):
+async def list_users(
+    token: CurrentToken,
+    session: DBSession,
+    skip: int = 0,
+    limit: int = 50,
+    role_id: int | None = None,
+):
+    """Con `role_id` devuelve sólo ese rol.
+
+    Lo usan los selectores que ofrecen operarios: sin el filtro, cada formulario
+    tendría que traer la lista completa y filtrarla en el cliente, repitiendo en
+    cada pantalla una regla que cambia con los roles.
+    """
     repo = UserRepository(session, token.tenant_id)
+    if role_id is not None:
+        return await repo.list_by_role(role_id, offset=skip, limit=limit)
     return await repo.list(offset=skip, limit=limit)
 
 
