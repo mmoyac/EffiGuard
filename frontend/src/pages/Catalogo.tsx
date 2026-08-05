@@ -13,7 +13,6 @@ import {
   Pencil,
   Plus,
   ShoppingCart,
-  Star,
   Trash2,
   Upload,
   Wrench,
@@ -26,15 +25,14 @@ import { ModalProducto } from "../components/catalogo/ModalProducto";
 import { ModalEditarVariante } from "../components/catalogo/ModalEditarVariante";
 import { AltaUnidades, ListaUnidades } from "../components/catalogo/ListaUnidades";
 import { ModalAjuste } from "../components/catalogo/ModalAjuste";
+import { SeccionCodigos } from "../components/catalogo/SeccionCodigos";
 import {
   BTN,
   COLORES_FAMILIA as COLORES,
   Campo,
   INPUT,
   Modal,
-  TIPO_ESTILO,
   mensajeError,
-  type Codigo,
   type Producto,
   type Unidad,
   type Variante,
@@ -54,58 +52,6 @@ type Reporte = {
   errores: { fila: number; motivo: string }[];
 };
 
-function ChipCodigo({ c, editable = false }: { c: Codigo; editable?: boolean }) {
-  const qc = useQueryClient();
-  const refrescar = () => qc.invalidateQueries("productos");
-
-  const principal = useMutation(() => catalogoApi.setCodigoPrincipal(c.id), {
-    onSuccess: refrescar,
-  });
-  const borrar = useMutation(() => catalogoApi.deleteCodigo(c.id), {
-    onSuccess: refrescar,
-    // El backend impide dejar una unidad sin códigos y explica por qué
-    onError: (e: any) => alert(mensajeError(e, "No se pudo eliminar el código")),
-  });
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-mono ${
-        TIPO_ESTILO[c.tipo] ?? "bg-gray-700 text-gray-300"
-      }`}
-      title={`${c.tipo}${c.proveedor_nombre ? ` · ${c.proveedor_nombre}` : ""}`}
-    >
-      {c.es_principal && <span className="text-[10px]" title="Principal">★</span>}
-      {c.codigo}
-      {/* El factor sólo significa algo en un empaque: es cuántas unidades trae */}
-      {c.tipo === "empaque" && (
-        <span className="opacity-70">
-          ×{c.factor} {c.nombre_empaque ?? ""}
-        </span>
-      )}
-      {c.proveedor_nombre && <span className="opacity-70 not-italic">· {c.proveedor_nombre}</span>}
-      {editable && (
-        <>
-          {!c.es_principal && (
-            <button
-              onClick={() => principal.mutate()}
-              title="Marcar como principal"
-              className="opacity-50 hover:opacity-100 ml-0.5"
-            >
-              <Star size={12} />
-            </button>
-          )}
-          <button
-            onClick={() => borrar.mutate()}
-            title="Eliminar código"
-            className="opacity-50 hover:opacity-100 hover:text-red-300"
-          >
-            <Trash2 size={12} />
-          </button>
-        </>
-      )}
-    </span>
-  );
-}
 
 /**
  * Alta de variante dentro de un producto existente.
@@ -255,158 +201,10 @@ function ModalVariante({ producto, onClose }: { producto: Producto; onClose: () 
   );
 }
 
-// Sólo los que identifican QUÉ es algo: `serie_fabrica` identifica un ejemplar
-// concreto y el backend lo rechaza sobre una variante.
-const TIPOS_DE_VARIANTE = [
-  ["proveedor", "Código del proveedor", "El número con que este proveedor lo vende"],
-  ["empaque", "Código del empaque", "La caja, rollo o saco — indica cuántas trae"],
-  ["fabricante", "EAN de fábrica", "El que viene impreso, igual para todos los proveedores"],
-  ["propio", "Código interno", "El que asignas tú"],
-] as const;
-
-function ModalCodigo({ v, onClose }: { v: Variante; onClose: () => void }) {
-  const qc = useQueryClient();
-  const [f, setF] = useState({
-    codigo: "",
-    tipo: "proveedor",
-    factor: "1",
-    nombre_empaque: "caja",
-    proveedor_id: "",
-  });
-  const [nuevoProveedor, setNuevoProveedor] = useState("");
-  const [error, setError] = useState("");
-  const esEmpaque = f.tipo === "empaque";
-
-  const { data: proveedores = [] } = useQuery<{ id: number; nombre: string }[]>(
-    "proveedores",
-    () => catalogoApi.listProveedores().then((r) => r.data)
-  );
-
-  const crear = useMutation(
-    async () => {
-      let proveedorId = f.proveedor_id ? Number(f.proveedor_id) : null;
-      // Crear el proveedor al vuelo evita mandar al bodeguero a otra pantalla
-      // en medio de la carga de un código.
-      if (!proveedorId && nuevoProveedor.trim()) {
-        const r = await catalogoApi.createProveedor({ nombre: nuevoProveedor.trim() });
-        proveedorId = r.data.id;
-        qc.invalidateQueries("proveedores");
-      }
-      return catalogoApi.addCodigoVariante(v.id, {
-        codigo: f.codigo.trim(),
-        tipo: f.tipo,
-        factor: esEmpaque ? Number(f.factor.replace(",", ".")) || 1 : 1,
-        ...(esEmpaque && f.nombre_empaque ? { nombre_empaque: f.nombre_empaque.trim() } : {}),
-        ...(proveedorId ? { proveedor_id: proveedorId } : {}),
-      });
-    },
-    {
-      onSuccess: () => {
-        qc.invalidateQueries("productos");
-        onClose();
-      },
-      onError: (e) => setError(mensajeError(e, "No se pudo agregar el código")),
-    }
-  );
-
-  return (
-    <Modal
-      titulo="Agregar código"
-      subtitulo={`${v.producto_nombre} · ${v.nombre}`}
-      onClose={onClose}
-    >
-      <Campo label="Código">
-        <input
-          className={`${INPUT} font-mono`}
-          placeholder="Escanéalo o escríbelo"
-          autoFocus
-          value={f.codigo}
-          onChange={(e) => setF({ ...f, codigo: e.target.value })}
-        />
-      </Campo>
-
-      <Campo label="Qué es este código">
-        <select
-          className={INPUT}
-          value={f.tipo}
-          onChange={(e) => setF({ ...f, tipo: e.target.value })}
-        >
-          {TIPOS_DE_VARIANTE.map(([valor, label]) => (
-            <option key={valor} value={valor}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-gray-500 mt-1">
-          {TIPOS_DE_VARIANTE.find(([t]) => t === f.tipo)?.[2]}
-        </p>
-      </Campo>
-
-      {esEmpaque && (
-        <div className="grid grid-cols-2 gap-2">
-          <Campo label={`Cuántas ${v.unidad} trae`}>
-            <input
-              className={INPUT}
-              inputMode="decimal"
-              value={f.factor}
-              onChange={(e) => setF({ ...f, factor: e.target.value })}
-            />
-          </Campo>
-          <Campo label="Cómo se llama el envase">
-            <input
-              className={INPUT}
-              placeholder="caja, rollo, saco…"
-              value={f.nombre_empaque}
-              onChange={(e) => setF({ ...f, nombre_empaque: e.target.value })}
-            />
-          </Campo>
-        </div>
-      )}
-
-      <Campo label="Proveedor (opcional)">
-        <select
-          className={INPUT}
-          value={f.proveedor_id}
-          onChange={(e) => setF({ ...f, proveedor_id: e.target.value })}
-        >
-          <option value="">— sin proveedor —</option>
-          {proveedores.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nombre}
-            </option>
-          ))}
-        </select>
-        {!f.proveedor_id && (
-          <input
-            className={`${INPUT} mt-2`}
-            placeholder="…o escribe uno nuevo para crearlo"
-            value={nuevoProveedor}
-            onChange={(e) => setNuevoProveedor(e.target.value)}
-          />
-        )}
-      </Campo>
-
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      <div className="flex gap-2">
-        <button onClick={onClose} className={`${BTN} flex-1 bg-gray-700 text-white`}>
-          Cancelar
-        </button>
-        <button
-          onClick={() => crear.mutate()}
-          disabled={crear.isLoading || !f.codigo.trim()}
-          className={`${BTN} flex-1 bg-blue-600 text-white hover:bg-blue-500`}
-        >
-          {crear.isLoading ? "Agregando…" : "Agregar código"}
-        </button>
-      </div>
-    </Modal>
-  );
-}
 function FilaVariante({ v }: { v: Variante }) {
   const [abierta, setAbierta] = useState(false);
   const [comprando, setComprando] = useState(false);
   const [entregando, setEntregando] = useState(false);
-  const [agregandoCodigo, setAgregandoCodigo] = useState(false);
   const [editando, setEditando] = useState(false);
   const [ajustando, setAjustando] = useState(false);
   const esPrestable = v.comportamiento === "prestable";
@@ -509,28 +307,7 @@ function FilaVariante({ v }: { v: Variante }) {
             </button>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-              <p className="text-xs uppercase tracking-wide text-gray-500">
-                Códigos de la variante
-              </p>
-              <button
-                onClick={() => setAgregandoCodigo(true)}
-                className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 min-h-[32px] px-1"
-              >
-                <Plus size={14} /> Agregar
-              </button>
-            </div>
-            {v.codigos.length ? (
-              <div className="flex flex-wrap gap-1.5">
-                {v.codigos.map((c) => (
-                  <ChipCodigo key={c.id} c={c} editable />
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-500">Sin códigos</p>
-            )}
-          </div>
+          <SeccionCodigos v={v} />
 
           {esPrestable && (
             <div>
@@ -548,7 +325,6 @@ function FilaVariante({ v }: { v: Variante }) {
 
       {comprando && <ModalCompra v={v} onClose={() => setComprando(false)} />}
       {entregando && <ModalEntrega v={v} onClose={() => setEntregando(false)} />}
-      {agregandoCodigo && <ModalCodigo v={v} onClose={() => setAgregandoCodigo(false)} />}
       {editando && <ModalEditarVariante v={v} onClose={() => setEditando(false)} />}
       {ajustando && <ModalAjuste v={v} onClose={() => setAjustando(false)} />}
     </div>

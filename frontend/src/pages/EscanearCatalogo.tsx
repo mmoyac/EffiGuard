@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
-import { AlertTriangle, Camera, HardHat, Keyboard, Layers, PackageCheck, ScanLine, Trash2, Undo2, Wifi, Wrench, X } from "lucide-react";
+import { AlertTriangle, Camera, HardHat, Keyboard, Layers, Link2 as LinkIcon, PackageCheck, ScanLine, Trash2, Undo2, Wifi, Wrench, X } from "lucide-react";
 import { useHIDScanner } from "../hooks/useHIDScanner";
 import { CameraScanner } from "../components/scanner/CameraScanner";
 import { NFCScanner } from "../components/scanner/NFCScanner";
@@ -10,6 +10,7 @@ import { ModalEntrega } from "../components/catalogo/ModalEntrega";
 import { ModalReintegro } from "../components/catalogo/ModalReintegro";
 import { ModalPrestamo } from "../components/catalogo/ModalPrestamo";
 import { ModalDevolucion } from "../components/catalogo/ModalDevolucion";
+import { ModalAsociarCodigo } from "../components/catalogo/ModalAsociarCodigo";
 import {
   BTN,
   INPUT,
@@ -55,6 +56,9 @@ export function EscanearCatalogo() {
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
   const [manual, setManual] = useState("");
+  // El código del último escaneo que dio 404, para poder ofrecer asociarlo
+  const [sinResolver, setSinResolver] = useState("");
+  const [asociando, setAsociando] = useState(false);
   const [camara, setCamara] = useState(false);
   const [nfc, setNfc] = useState(false);
   const [modal, setModal] = useState<Accion>(null);
@@ -101,12 +105,20 @@ export function EscanearCatalogo() {
       setCargando(true);
       setError("");
       setR(null);
+      setSinResolver("");
       try {
         const res = await catalogoApi.scan(codigo.trim());
         setR(res.data);
-      } catch (e) {
+      } catch (e: any) {
         setError(mensajeError(e, "Código no encontrado"));
-        setTimeout(() => setError(""), 4000);
+        // Un 404 es un código que existe en el mundo físico y no en el catálogo:
+        // se ofrece asociarlo en vez de limpiar y dejar al bodeguero sin salida.
+        // Cualquier otro error sí se desvanece — no hay nada que asociar.
+        if (e?.response?.status === 404) {
+          setSinResolver(codigo.trim());
+        } else {
+          setTimeout(() => setError(""), 4000);
+        }
       } finally {
         setCargando(false);
       }
@@ -121,6 +133,7 @@ export function EscanearCatalogo() {
     setR(null);
     setError("");
     setManual("");
+    setSinResolver("");
   }
 
   /** Tras operar, se vuelve a resolver el mismo código para ver el estado nuevo. */
@@ -182,9 +195,25 @@ export function EscanearCatalogo() {
         {cargando && <p className="text-sm text-gray-400">Resolviendo…</p>}
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-4 py-3 flex items-center gap-2">
-            <AlertTriangle size={18} className="text-red-400 flex-shrink-0" />
-            <p className="text-sm text-red-300">{error}</p>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-4 py-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} className="text-red-400 flex-shrink-0" />
+              <p className="text-sm text-red-300 min-w-0 break-all">{error}</p>
+            </div>
+            {/* El código existe en la caja aunque no en el catálogo: se ofrece
+                asociarlo acá mismo en vez de mandar al bodeguero al mantenedor
+                con el operario esperando en el mesón. */}
+            {sinResolver && (
+              <>
+                <p className="text-xs text-gray-400 font-mono break-all">{sinResolver}</p>
+                <button
+                  onClick={() => setAsociando(true)}
+                  className={`${BTN} w-full bg-blue-600 text-white hover:bg-blue-500`}
+                >
+                  <LinkIcon size={16} /> Asociar este código
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -410,6 +439,22 @@ export function EscanearCatalogo() {
         )}
         {r && modal === "devolucion" && prestamoActivo && (
           <ModalDevolucion prestamo={prestamoActivo} onClose={cerrarYRefrescar} />
+        )}
+
+        {asociando && sinResolver && (
+          <ModalAsociarCodigo
+            codigo={sinResolver}
+            onClose={() => setAsociando(false)}
+            // Ya asociado, se vuelve a resolver: el flujo sigue en la acción
+            // operativa que corresponda, que es a lo que venía el bodeguero.
+            onAsociado={() => {
+              const codigo = sinResolver;
+              setAsociando(false);
+              setSinResolver("");
+              setError("");
+              resolver(codigo);
+            }}
+          />
         )}
       </div>
     </TenantGuard>

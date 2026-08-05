@@ -30,7 +30,24 @@ export function CameraScanner({ onScan, active, id = "camera-qr-region" }: Camer
       const scanner = new Html5Qrcode(SCANNER_ID, { verbose: false });
       scannerRef.current = scanner;
 
-      const config = { fps: 10, qrbox: { width: 200, height: 200 } };
+      // Ventana ancha y baja, no un cuadrado: el EAN13 impreso en la caja es el
+      // código que más se escanea en bodega y tiene proporción cercana a 3:1.
+      // Forzarlo dentro de un cuadrado obliga a alejar el teléfono, y ahí las
+      // barras finas pierden justo la resolución que necesitan. Contiene al
+      // cuadrado anterior, así que el QR tiene al menos la misma superficie.
+      //
+      // No se declara `formatsToSupport`: omitirlo es lo que habilita todos los
+      // formatos (EAN, UPC, Code128/39 además de QR). Declararlo sería fijar una
+      // lista que hay que mantener, y restringirla a QR dejaría de leer los
+      // códigos impresos de fábrica.
+      const config = {
+        fps: 10,
+        qrbox: (anchoVista: number, altoVista: number) => {
+          const ancho = Math.max(160, Math.min(anchoVista * 0.85, 380));
+          const alto = Math.max(120, Math.min(ancho * 0.55, altoVista * 0.7));
+          return { width: Math.round(ancho), height: Math.round(alto) };
+        },
+      };
 
       // Intentar primero con la cámara preferida, luego con la otra
       const facingModes = useBack
@@ -113,10 +130,12 @@ export function CameraScanner({ onScan, active, id = "camera-qr-region" }: Camer
       {/* html5-qrcode inyecta el video aquí — necesita tener ancho definido */}
       <div id={SCANNER_ID} className="w-full" style={{ minHeight: 240 }} />
 
-      {/* Overlay: esquinas decorativas */}
+      {/* Overlay: esquinas decorativas.
+          Siguen la proporción del `qrbox` (ancho×0.55) — un marco cuadrado sobre
+          una ventana ancha le mentiría al usuario sobre dónde apuntar. */}
       {!starting && (
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="w-48 h-48 relative">
+          <div className="w-[85%] max-w-[380px] aspect-[1.82/1] relative">
             {[
               "top-0 left-0 border-t-2 border-l-2",
               "top-0 right-0 border-t-2 border-r-2",

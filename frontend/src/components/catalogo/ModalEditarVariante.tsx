@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "react-query";
 import { catalogoApi } from "../../services/api";
+import { SeccionCodigos } from "./SeccionCodigos";
 import { BTN, Campo, INPUT, Modal, mensajeError, type Variante } from "./shared";
 
 /**
@@ -112,6 +113,16 @@ export function ModalEditarVariante({ v, onClose }: { v: Variante; onClose: () =
         Cambiar el precio no revaloriza los movimientos ya registrados: cada uno
         conserva el costo con que ocurrió.
       </p>
+
+      {/*
+        Los códigos van acá porque es donde se los busca: el botón dice editar la
+        variante y los códigos son parte de la variante. Se mantienen también en
+        el panel, que sirve para verlos de un vistazo sin intención de tocarlos.
+        Al final del formulario, después de los campos que se editan más seguido.
+      */}
+      <div className="border-t border-gray-700 pt-3">
+        <SeccionCodigos v={v} />
+      </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
