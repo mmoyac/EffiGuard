@@ -1,0 +1,102 @@
+================================================================================
+ RESET DE UN TENANT — deja el inventario en cero conservando maestros
+================================================================================
+
+Borra catálogo y movimientos de UN tenant. NO toca usuarios, familias, marcas,
+ubicaciones, proyectos, menús ni permisos: eso es parametrización, no inventario.
+
+Cambia 'demo' por el slug del tenant que quieras resetear.
+
+--- 1. Ver qué tenants hay y qué tiene cada uno -------------------------------
+
+docker exec -i effiguard_db sh <<'EOF'
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
+SELECT t.id, t.slug, t.nombre_empresa,
+       (SELECT count(*) FROM productos      p WHERE p.tenant_id = t.id) AS productos,
+       (SELECT count(*) FROM variantes      v WHERE v.tenant_id = t.id) AS variantes,
+       (SELECT count(*) FROM unidades       u WHERE u.tenant_id = t.id) AS ejemplares,
+       (SELECT count(*) FROM inventory_logs l WHERE l.tenant_id = t.id) AS movimientos,
+       (SELECT count(*) FROM loans          n WHERE n.tenant_id = t.id) AS prestamos
+FROM tenants t ORDER BY t.id;"
+EOF
+
+--- 2. Respaldo (el borrado es irreversible) ----------------------------------
+
+docker exec effiguard_db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  > ~/effiguard-$(date +%F-%H%M).sql
+
+--- 3. Reset del tenant -------------------------------------------------------
+
+El orden respeta las claves foráneas: los movimientos apuntan al catálogo, los
+códigos a variantes y unidades, las unidades a variantes, y las variantes a
+productos. Todo dentro de una transacción: o se borra completo o no se borra nada.
+
+docker exec -i effiguard_db sh <<'EOF'
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "
+BEGIN;
+DELETE FROM inventory_logs WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+DELETE FROM loans          WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+DELETE FROM codigos        WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+DELETE FROM unidades       WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+DELETE FROM variantes      WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+DELETE FROM productos      WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+DELETE FROM proveedores    WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+COMMIT;
+
+SELECT t.slug,
+       (SELECT count(*) FROM productos      p WHERE p.tenant_id = t.id) AS productos,
+       (SELECT count(*) FROM variantes      v WHERE v.tenant_id = t.id) AS variantes,
+       (SELECT count(*) FROM unidades       u WHERE u.tenant_id = t.id) AS ejemplares,
+       (SELECT count(*) FROM codigos        c WHERE c.tenant_id = t.id) AS codigos,
+       (SELECT count(*) FROM proveedores    r WHERE r.tenant_id = t.id) AS proveedores,
+       (SELECT count(*) FROM inventory_logs l WHERE l.tenant_id = t.id) AS movimientos,
+       (SELECT count(*) FROM loans          n WHERE n.tenant_id = t.id) AS prestamos,
+       (SELECT count(*) FROM users          x WHERE x.tenant_id = t.id) AS usuarios_INTACTOS,
+       (SELECT count(*) FROM asset_families f WHERE f.tenant_id = t.id) AS familias_INTACTAS,
+       (SELECT count(*) FROM ubicaciones    b WHERE b.tenant_id = t.id) AS ubicac_INTACTAS
+FROM tenants t WHERE t.slug = 'demo';"
+EOF
+
+Las siete primeras columnas deben quedar en 0; las tres últimas, con sus valores.
+
+--- Variante: borrar sólo los movimientos, conservando el catálogo ------------
+
+Útil para repetir una demo sin volver a cargar productos.
+
+docker exec -i effiguard_db sh <<'EOF'
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "
+BEGIN;
+DELETE FROM inventory_logs WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+DELETE FROM loans          WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+UPDATE variantes SET stock_actual = 0 WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+UPDATE unidades  SET estado_id = 1    WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'demo');
+COMMIT;"
+EOF
+
+El stock vuelve a cero y los ejemplares a Disponible: borrar los movimientos sin
+revertir sus efectos dejaría un stock que ningún movimiento explica.
+
+--- Por qué heredoc y no comillas --------------------------------------------
+
+Con <<'EOF' el texto viaja intacto y $POSTGRES_USER lo resuelve el contenedor,
+que sí tiene la variable. Escrito en una línea con comillas dobles, el shell del
+host expande las variables antes de enviarlas —y ahí están vacías— y las comillas
+simples del SQL se pierden en el escapado.
+
+--- Después del reset ---------------------------------------------------------
+
+El catálogo se carga desde la app: Catálogo → Descargar template. El Excel trae
+filas de ejemplo con las familias reales de ese tenant.
+
+================================================================================
+ ACCESOS DEMO
+================================================================================
+
+https://effiguard-demo.effi4tech.cl/
+
+admin@demo.cl        Admin Demo   admin123
+gille@demo.cl        Bodeguero    admin123
+alejandro@demo.cl    Operario     admin123
+
+NOTA: este archivo tiene contraseñas y está fuera de git a propósito.
+Si alguna vez se versiona, sacarlas primero.
