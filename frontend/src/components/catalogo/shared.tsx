@@ -44,6 +44,9 @@ export type Variante = {
   unidades_total: number;
   unidades_disponibles: number;
   precio_compra: number | null;
+  // Techo de días para prestarla: el de la variante, o el que hereda de su familia.
+  dias_max_prestamo: number | null;
+  family?: { nombre: string; color: string; dias_max_prestamo: number | null };
   codigos: Codigo[];
   ubicacion: { rack: string; nivel: string; posicion: string } | null;
 };

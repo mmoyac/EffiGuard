@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -8,6 +9,9 @@ class LoanCreate(BaseModel):
     user_id: int          # Operario que recibe
     project_id: int | None = None
     fecha_devolucion_prevista: datetime | None = None
+    # `plazo` vuelve; `a_cargo` queda con el operario y nunca se le reclama.
+    # Por defecto plazo: dejar una herramienta a cargo se elige queriendo.
+    modalidad: Literal["plazo", "a_cargo"] = "plazo"
 
 
 class LoanReturn(BaseModel):
@@ -26,6 +30,7 @@ class LoanResponse(BaseModel):
     fecha_entrega: datetime
     fecha_devolucion_prevista: datetime | None
     fecha_devolucion_real: datetime | None
+    modalidad: str
 
     model_config = {"from_attributes": True}
 

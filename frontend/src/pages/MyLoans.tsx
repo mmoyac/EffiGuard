@@ -44,13 +44,25 @@ function LoanCard({ loan }: { loan: Loan }) {
   const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
   const entregaDia = new Date(entrega.getFullYear(), entrega.getMonth(), entrega.getDate());
   const diasTranscurridos = Math.floor((hoy.getTime() - entregaDia.getTime()) / (1000 * 60 * 60 * 24));
-  const vencida = loan.fecha_devolucion_prevista && new Date(loan.fecha_devolucion_prevista) < ahora;
+  // A cargo: es tuya hasta que la devuelvas. No hay fecha que reclamar.
+  const aCargo = loan.modalidad === "a_cargo";
+  const vencida =
+    !aCargo && loan.fecha_devolucion_prevista && new Date(loan.fecha_devolucion_prevista) < ahora;
 
   return (
-    <div className={`bg-gray-800 rounded-2xl border p-4 space-y-3 ${vencida ? "border-red-800" : "border-gray-700"}`}>
+    <div
+      className={`bg-gray-800 rounded-2xl border p-4 space-y-3 ${
+        vencida ? "border-red-800" : aCargo ? "border-purple-800/60" : "border-gray-700"
+      }`}
+    >
       {vencida && (
         <div className="text-xs text-red-400 font-semibold bg-red-900/20 px-3 py-1.5 rounded-lg border border-red-800">
           ⚠ Devolución vencida
+        </div>
+      )}
+      {aCargo && (
+        <div className="text-xs text-purple-300 font-semibold bg-purple-900/20 px-3 py-1.5 rounded-lg border border-purple-800/60">
+          Está a tu cargo · no se te pedirá devolución
         </div>
       )}
 
@@ -86,8 +98,12 @@ function LoanCard({ loan }: { loan: Loan }) {
         </div>
 
         <div className={`rounded-xl px-3 py-2.5 ${vencida ? "bg-red-900/20" : "bg-gray-700/50"}`}>
-          <p className="text-xs text-gray-400 mb-0.5">Devolver antes de</p>
-          {loan.fecha_devolucion_prevista ? (
+          <p className="text-xs text-gray-400 mb-0.5">
+            {aCargo ? "A tu cargo" : "Devolver antes de"}
+          </p>
+          {aCargo ? (
+            <p className="text-sm text-purple-300 font-medium">Sin plazo</p>
+          ) : loan.fecha_devolucion_prevista ? (
             <p className={`text-sm font-medium ${vencida ? "text-red-400" : "text-white"}`}>
               {new Date(loan.fecha_devolucion_prevista).toLocaleDateString("es-CL")}
             </p>

@@ -161,6 +161,7 @@ async def create_loan(data: LoanCreate, token: CurrentToken, session: DBSession)
         token.user_id,
         project_id=data.project_id,
         fecha_devolucion_prevista=data.fecha_devolucion_prevista,
+        modalidad=data.modalidad,
     )
     await session.commit()
     return prestamos

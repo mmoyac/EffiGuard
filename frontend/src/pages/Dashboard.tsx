@@ -36,6 +36,9 @@ interface OverdueLoan {
   loan_id: number; asset_id: number; uid_fisico: string; asset_nombre: string | null;
   family_nombre: string; family_color: string;
   user_nombre: string; dias_transcurridos: number; dias_max: number; dias_excedido: number;
+  // De dónde sale el plazo incumplido: la fecha que pactó el bodeguero al
+  // entregar, o el límite que la variante hereda del catálogo.
+  origen_plazo: "pactado" | "catalogo";
   fecha_entrega: string;
 }
 
@@ -509,7 +512,10 @@ export function Dashboard() {
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${familyColor(item.family_color).swatch}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-white truncate">{item.asset_nombre ?? item.uid_fisico}</p>
-                    <p className="text-xs text-gray-500 truncate">{item.user_nombre}</p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {item.user_nombre}
+                      {item.origen_plazo === "pactado" ? " · plazo pactado" : " · límite del catálogo"}
+                    </p>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-bold text-red-400">+{item.dias_excedido}d</p>

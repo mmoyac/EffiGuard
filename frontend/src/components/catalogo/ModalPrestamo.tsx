@@ -14,6 +14,11 @@ type Pieza = { id: number; codigo_principal: string | null; estado_id: number };
  * Si el escaneo resolvió un ejemplar concreto se presta ése; si resolvió la
  * variante (el EAN del modelo, que los tres esmeriles comparten) hay que elegir
  * cuál de los libres se lleva.
+ *
+ * Se entrega de dos maneras: por un plazo —vuelve en N días— o **a cargo**, que
+ * la deja bajo la responsabilidad del operario sin fecha de devolución. El plazo
+ * va preseleccionado a propósito: dejar una herramienta a cargo es la decisión
+ * mayor de las dos y se elige queriendo, no por descuido.
  */
 export function ModalPrestamo({
   v,
@@ -32,7 +37,13 @@ export function ModalPrestamo({
   const [errorCredencial, setErrorCredencial] = useState("");
   const [projectId, setProjectId] = useState("");
   const [dias, setDias] = useState("");
+  const [modalidad, setModalidad] = useState<"plazo" | "a_cargo">("plazo");
   const [error, setError] = useState("");
+
+  // El techo que permite el catálogo: override de la variante, o el de su familia.
+  const techo = v.dias_max_prestamo ?? v.family?.dias_max_prestamo ?? null;
+  const excedePlazo =
+    modalidad === "plazo" && dias !== "" && techo !== null && Number(dias) > techo;
 
   const { data: disponibles = [] } = useQuery<Disponible[]>(
     ["disponibles", v.id],
@@ -80,12 +91,15 @@ export function ModalPrestamo({
 
   const prestar = useMutation(
     () => {
-      const prevista = dias
-        ? new Date(Date.now() + Number(dias) * 86400000).toISOString()
-        : undefined;
+      // Una entrega a cargo no lleva fecha: el backend la rechaza, y con razón.
+      const prevista =
+        modalidad === "plazo" && dias
+          ? new Date(Date.now() + Number(dias) * 86400000).toISOString()
+          : undefined;
       return loansApi.create({
         unidad_id: elegida,
         user_id: Number(operarioId),
+        modalidad,
         ...(projectId ? { project_id: Number(projectId) } : {}),
         ...(prevista ? { fecha_devolucion_prevista: prevista } : {}),
       });
@@ -101,6 +115,15 @@ export function ModalPrestamo({
   );
 
   const esKit = piezas.length > 0;
+  // Al rechazo por plazo se le ofrece la salida legítima, en vez de dejar al
+  // bodeguero recortando días en el mesón hasta que el sistema lo deje pasar.
+  const plazoRechazado = error.startsWith("El plazo máximo");
+
+  function pasarACargo() {
+    setModalidad("a_cargo");
+    setDias("");
+    setError("");
+  }
 
   return (
     <Modal
@@ -171,29 +194,87 @@ export function ModalPrestamo({
         </select>
       </Campo>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Campo label="Proyecto (opcional)">
-          <select className={INPUT} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">— sin obra —</option>
-            {proyectos.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre}
-              </option>
-            ))}
-          </select>
-        </Campo>
-        <Campo label="Devuelve en (días)">
+      <Campo label="Proyecto (opcional)">
+        <select className={INPUT} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+          <option value="">— sin obra —</option>
+          {proyectos.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nombre}
+            </option>
+          ))}
+        </select>
+      </Campo>
+
+      <Campo label="Cómo se entrega">
+        <div className="grid grid-cols-2 gap-2 mt-1">
+          <button
+            type="button"
+            onClick={() => {
+              setModalidad("plazo");
+              setError("");
+            }}
+            className={`${BTN} ${
+              modalidad === "plazo" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"
+            }`}
+          >
+            Por días
+          </button>
+          <button
+            type="button"
+            onClick={pasarACargo}
+            className={`${BTN} ${
+              modalidad === "a_cargo" ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-300"
+            }`}
+          >
+            A cargo
+          </button>
+        </div>
+      </Campo>
+
+      {modalidad === "plazo" ? (
+        <Campo
+          label={
+            techo !== null ? `Devuelve en (días) · máximo ${techo}` : "Devuelve en (días)"
+          }
+        >
           <input
             className={INPUT}
             inputMode="numeric"
-            placeholder="hereda el límite de la familia"
+            placeholder={techo !== null ? `hasta ${techo} días` : "sin límite configurado"}
             value={dias}
             onChange={(e) => setDias(e.target.value)}
           />
+          {excedePlazo && (
+            <p className="text-xs text-amber-300 mt-1">
+              El máximo para esta herramienta es {techo} días. Si la necesita por más
+              tiempo, entrégala a cargo.
+            </p>
+          )}
         </Campo>
-      </div>
+      ) : (
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl px-3 py-2.5">
+          <p className="text-xs text-purple-200">
+            Queda a cargo de{" "}
+            <span className="font-semibold">{operarioNombre || "quien la recibe"}</span>. No
+            se le pedirá devolución ni aparecerá como atrasada.
+          </p>
+        </div>
+      )}
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && (
+        <div className="space-y-2">
+          <p className="text-sm text-red-400">{error}</p>
+          {plazoRechazado && (
+            <button
+              type="button"
+              onClick={pasarACargo}
+              className={`${BTN} w-full bg-purple-600 text-white hover:bg-purple-500`}
+            >
+              Entregarla a cargo
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-2">
         <button onClick={onClose} className={`${BTN} flex-1 bg-gray-700 text-white`}>
@@ -201,10 +282,22 @@ export function ModalPrestamo({
         </button>
         <button
           onClick={() => prestar.mutate()}
-          disabled={prestar.isLoading || !elegida || !operarioId}
-          className={`${BTN} flex-1 bg-blue-600 text-white hover:bg-blue-500`}
+          disabled={prestar.isLoading || !elegida || !operarioId || excedePlazo}
+          className={`${BTN} flex-1 ${
+            modalidad === "a_cargo"
+              ? "bg-purple-600 hover:bg-purple-500"
+              : "bg-blue-600 hover:bg-blue-500"
+          } text-white`}
         >
-          {prestar.isLoading ? "Registrando…" : esKit ? "Prestar kit" : "Prestar"}
+          {prestar.isLoading
+            ? "Registrando…"
+            : modalidad === "a_cargo"
+            ? esKit
+              ? "Entregar kit a cargo"
+              : "Entregar a cargo"
+            : esKit
+            ? "Prestar kit"
+            : "Prestar"}
         </button>
       </div>
     </Modal>

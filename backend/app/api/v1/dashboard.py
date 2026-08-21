@@ -8,7 +8,7 @@ from app.core.dependencies import CurrentToken, DBSession
 from app.models.asset_family import AssetFamily
 from app.models.asset_state import AssetState
 from app.models.inventory_log import InventoryLog
-from app.models.loan import Loan
+from app.models.loan import MODALIDAD_A_CARGO, Loan
 from app.models.user import User
 from app.models.unidad import Unidad
 from app.models.variante import Variante
@@ -197,7 +197,17 @@ async def materiales_de_proyecto(project_id: int, token: CurrentToken, session: 
 
 @router.get("/overdue-loans")
 async def overdue_loans(token: CurrentToken, session: DBSession):
-    """Préstamos abiertos que superaron el límite de días de su variante o familia."""
+    """Préstamos abiertos que superaron su plazo, con la precedencia:
+
+    1. Entregado a cargo → nunca vence. Nadie le pidió que volviera.
+    2. Con fecha pactada → manda esa fecha. El bodeguero sabía algo que el
+       catálogo no sabe, y hasta ahora ese dato se guardaba sin usarse.
+    3. Sin fecha → límite del catálogo (override de la variante o su familia).
+    4. Sin fecha y sin límite → fuera del cálculo.
+
+    Lo entregado a cargo se excluye en la consulta y no en el bucle: no tiene
+    sentido traer filas para descartarlas.
+    """
     from app.models.codigo import Codigo
     from app.models.producto import Producto
 
@@ -214,6 +224,7 @@ async def overdue_loans(token: CurrentToken, session: DBSession):
         sa.select(
             Loan.id.label("loan_id"),
             Loan.fecha_entrega,
+            Loan.fecha_devolucion_prevista,
             Unidad.id.label("unidad_id"),
             principal.c.codigo.label("uid_fisico"),
             (Producto.nombre + " · " + Variante.nombre).label("asset_nombre"),
@@ -231,8 +242,10 @@ async def overdue_loans(token: CurrentToken, session: DBSession):
         .outerjoin(principal, principal.c.unidad_id == Unidad.id)
         .where(Loan.tenant_id == token.tenant_id)
         .where(Loan.fecha_devolucion_real.is_(None))
+        .where(Loan.modalidad != MODALIDAD_A_CARGO)
         .where(
             sa.or_(
+                Loan.fecha_devolucion_prevista.isnot(None),
                 Variante.dias_max_prestamo.isnot(None),
                 AssetFamily.dias_max_prestamo.isnot(None),
             )
@@ -242,23 +255,42 @@ async def overdue_loans(token: CurrentToken, session: DBSession):
     now = datetime.now(timezone.utc)
     result = []
     for r in rows:
-        # Herencia: override de la variante → familia → sin límite
-        limite = r.variante_dias if r.variante_dias is not None else r.family_dias
-        if limite is None:
-            continue
-        dias_transcurridos = (now - r.fecha_entrega.replace(tzinfo=timezone.utc)).days
-        if dias_transcurridos > limite:
-            result.append({
-                "loan_id": r.loan_id,
-                "asset_id": r.unidad_id,
-                "uid_fisico": r.uid_fisico,
-                "asset_nombre": r.asset_nombre,
-                "family_nombre": r.family_nombre,
-                "family_color": r.family_color,
-                "user_nombre": r.user_nombre,
-                "dias_transcurridos": dias_transcurridos,
-                "dias_max": limite,
-                "dias_excedido": dias_transcurridos - limite,
-            })
+        entrega = r.fecha_entrega.replace(tzinfo=timezone.utc)
+        dias_transcurridos = (now - entrega).days
 
+        if r.fecha_devolucion_prevista is not None:
+            prevista = r.fecha_devolucion_prevista.replace(tzinfo=timezone.utc)
+            if now <= prevista:
+                continue
+            origen = "pactado"
+            # Redondeo y no techo: el plazo se pacta en días enteros y se guarda
+            # como instante, así que "5 días" vuelve con microsegundos de sobra y
+            # un ceil lo reportaría como 6. El exceso se cuenta en días cumplidos,
+            # con mínimo 1: algo vencido hace horas no puede mostrarse como "+0d".
+            limite = round((prevista - entrega).total_seconds() / 86400)
+            dias_excedido = max(1, (now - prevista).days)
+        else:
+            # Herencia: override de la variante → familia → sin límite
+            limite = r.variante_dias if r.variante_dias is not None else r.family_dias
+            if limite is None or dias_transcurridos <= limite:
+                continue
+            origen = "catalogo"
+            dias_excedido = dias_transcurridos - limite
+
+        result.append({
+            "loan_id": r.loan_id,
+            "asset_id": r.unidad_id,
+            "uid_fisico": r.uid_fisico,
+            "asset_nombre": r.asset_nombre,
+            "family_nombre": r.family_nombre,
+            "family_color": r.family_color,
+            "user_nombre": r.user_nombre,
+            "dias_transcurridos": dias_transcurridos,
+            "dias_max": limite,
+            "dias_excedido": dias_excedido,
+            "origen_plazo": origen,
+        })
+
+    # Lo más atrasado primero: es el orden en que hay que salir a buscarlas.
+    result.sort(key=lambda x: x["dias_excedido"], reverse=True)
     return result

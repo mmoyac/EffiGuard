@@ -31,6 +31,8 @@ type PrestamoActivo = {
   bodeguero_nombre: string;
   proyecto_nombre: string | null;
   fecha_entrega: string;
+  fecha_devolucion_prevista: string | null;
+  modalidad: "plazo" | "a_cargo";
   asset_nombre: string | null;
   asset_uid_fisico: string | null;
 };
@@ -368,15 +370,50 @@ export function EscanearCatalogo() {
                 )}
 
                 {prestamoActivo && (
-                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-3 py-2.5 text-sm">
-                    <p className="text-blue-200">
-                      La tiene <span className="font-semibold">{prestamoActivo.user_nombre}</span>
+                  /* Cómo se entregó cambia lo que hay que leer acá: con plazo importa
+                     la fecha y si ya pasó; a cargo importa quién responde. */
+                  <div
+                    className={`rounded-xl px-3 py-2.5 text-sm border ${
+                      prestamoActivo.modalidad === "a_cargo"
+                        ? "bg-purple-500/10 border-purple-500/30"
+                        : "bg-blue-500/10 border-blue-500/30"
+                    }`}
+                  >
+                    <p
+                      className={
+                        prestamoActivo.modalidad === "a_cargo" ? "text-purple-200" : "text-blue-200"
+                      }
+                    >
+                      {prestamoActivo.modalidad === "a_cargo" ? "A cargo de " : "La tiene "}
+                      <span className="font-semibold">{prestamoActivo.user_nombre}</span>
                     </p>
-                    <p className="text-blue-300/70 text-xs">
+                    <p
+                      className={`text-xs ${
+                        prestamoActivo.modalidad === "a_cargo"
+                          ? "text-purple-300/70"
+                          : "text-blue-300/70"
+                      }`}
+                    >
                       desde {new Date(prestamoActivo.fecha_entrega).toLocaleDateString("es-CL")}
                       {prestamoActivo.proyecto_nombre && ` · ${prestamoActivo.proyecto_nombre}`}
                       {prestamoActivo.bodeguero_nombre && ` · entregó ${prestamoActivo.bodeguero_nombre}`}
                     </p>
+                    {prestamoActivo.modalidad === "a_cargo" ? (
+                      <p className="text-xs text-purple-300/70">sin plazo de devolución</p>
+                    ) : prestamoActivo.fecha_devolucion_prevista ? (
+                      <p
+                        className={`text-xs ${
+                          new Date(prestamoActivo.fecha_devolucion_prevista) < new Date()
+                            ? "text-red-400 font-semibold"
+                            : "text-blue-300/70"
+                        }`}
+                      >
+                        {new Date(prestamoActivo.fecha_devolucion_prevista) < new Date()
+                          ? "atrasada desde "
+                          : "debe volver el "}
+                        {new Date(prestamoActivo.fecha_devolucion_prevista).toLocaleDateString("es-CL")}
+                      </p>
+                    ) : null}
                   </div>
                 )}
 

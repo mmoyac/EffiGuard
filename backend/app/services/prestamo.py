@@ -5,11 +5,13 @@ Se presta una **unidad**, no un modelo: "este taladro", no "un taladro". Es lo q
 permite responder quién tiene cuál, y lo que hace que un kit sea un conjunto de
 piezas concretas y no una idea.
 """
-from datetime import datetime
+import math
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.loan import MODALIDAD_A_CARGO, MODALIDAD_PLAZO
 from app.models.unidad import Unidad
 from app.repositories.inventory_log import InventoryLogRepository
 from app.repositories.loan import LoanRepository
@@ -33,6 +35,41 @@ def _codigo_de(unidad: Unidad) -> str:
     return principal or (unidad.codigos[0].codigo if unidad.codigos else f"#{unidad.id}")
 
 
+def _limite_de(unidad: Unidad) -> int | None:
+    """Días máximos de préstamo: override de la variante, herencia de la familia, o ninguno."""
+    variante = unidad.variante
+    if variante.dias_max_prestamo is not None:
+        return variante.dias_max_prestamo
+    return variante.producto.family.dias_max_prestamo
+
+
+def _validar_plazo(piezas: list[Unidad], fecha_devolucion_prevista: datetime) -> None:
+    """El límite del catálogo es el techo del acuerdo, no un dato paralelo.
+
+    Un plazo por encima sólo puede terminar en un préstamo que nace vencido, y el
+    bodeguero no tiene por qué descubrirlo al día siguiente en el panel.
+
+    En un kit manda la pieza más restrictiva: el plazo es uno solo para todas, así
+    que basta una con techo más bajo para que ese préstamo naciera vencido.
+    """
+    limites = [l for l in (_limite_de(p) for p in piezas) if l is not None]
+    if not limites:
+        return  # Sin techo en el catálogo no hay contra qué medir
+
+    prevista = fecha_devolucion_prevista
+    if prevista.tzinfo is None:
+        prevista = prevista.replace(tzinfo=timezone.utc)
+    dias_pedidos = math.ceil((prevista - datetime.now(timezone.utc)).total_seconds() / 86400)
+
+    techo = min(limites)
+    if dias_pedidos > techo:
+        sujeto = "esta herramienta" if len(piezas) == 1 else "este kit"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"El plazo máximo para {sujeto} es de {techo} días",
+        )
+
+
 async def _validar_prestable(unidad: Unidad) -> str:
     comportamiento = unidad.variante.producto.family.comportamiento
     if comportamiento != "prestable":
@@ -52,14 +89,26 @@ async def crear_prestamo(
     *,
     project_id: int | None = None,
     fecha_devolucion_prevista: datetime | None = None,
+    modalidad: str = MODALIDAD_PLAZO,
 ):
     """Presta un ejemplar, o el kit completo si el ejemplar tiene piezas hijas.
 
     El kit se valida entero **antes** de crear ningún préstamo: entregar media caja
     de herramientas y descubrir a mitad de camino que falta una pieza deja al
     bodeguero con registros que no puede deshacer.
+
+    La modalidad se propaga a todas las piezas: no existe la caja entregada a cargo
+    con el disco de corte a plazo. El kit vuelve entero o no vuelve.
     """
     from app.models.user import User
+
+    if modalidad == MODALIDAD_A_CARGO and fecha_devolucion_prevista is not None:
+        # Juntas no significan nada, y aceptarlas dejaría un plazo que nadie va a
+        # hacer cumplir: lo entregado a cargo está fuera del cálculo de vencidos.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Una entrega a cargo no lleva fecha de devolución",
+        )
 
     unidad_repo = UnidadRepository(session, tenant_id)
     loan_repo = LoanRepository(session, tenant_id)
@@ -75,6 +124,9 @@ async def crear_prestamo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operario no encontrado")
 
     piezas = [unidad, *unidad.children]
+
+    if fecha_devolucion_prevista is not None:
+        _validar_plazo(piezas, fecha_devolucion_prevista)
 
     for pieza in piezas:
         if await loan_repo.get_active_by_unidad(pieza.id):
@@ -101,6 +153,7 @@ async def crear_prestamo(
             bodeguero_id=bodeguero_id,
             project_id=project_id,
             fecha_devolucion_prevista=fecha_devolucion_prevista,
+            modalidad=modalidad,
         )
         await unidad_repo.update(pieza, estado_id=ESTADO_EN_TERRENO)
         await log_repo.create(

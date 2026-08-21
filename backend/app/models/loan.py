@@ -1,9 +1,17 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+# Cómo se entregó, que es lo que decide a quién le reclama el sistema:
+#   plazo    la herramienta vuelve. Con fecha pactada, o con el límite del catálogo.
+#   a_cargo  queda bajo la responsabilidad del operario hasta que la devuelva.
+#            No hay fecha esperada y nunca aparece como vencida.
+MODALIDAD_PLAZO = "plazo"
+MODALIDAD_A_CARGO = "a_cargo"
+MODALIDADES_VALIDAS = (MODALIDAD_PLAZO, MODALIDAD_A_CARGO)
 
 
 class Loan(Base):
@@ -18,6 +26,9 @@ class Loan(Base):
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     fecha_entrega: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     fecha_devolucion_prevista: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Una columna y no la ausencia de `fecha_devolucion_prevista`: esa nulidad ya
+    # significa "sin fecha pactada, rige el límite del catálogo", que es lo común.
+    modalidad: Mapped[str] = mapped_column(String(10), default=MODALIDAD_PLAZO, server_default=MODALIDAD_PLAZO)
     fecha_devolucion_real: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     unidad: Mapped["Unidad"] = relationship(back_populates="loans")

@@ -117,6 +117,9 @@ export interface Loan {
   fecha_entrega: string;
   fecha_devolucion_prevista: string | null;
   fecha_devolucion_real: string | null;
+  // Cómo se entregó: `plazo` vuelve en una fecha, `a_cargo` queda con el operario
+  // bajo su responsabilidad y nunca se marca como atrasada.
+  modalidad: "plazo" | "a_cargo";
   // Campos enriquecidos (solo en préstamo activo del scanner)
   user_nombre?: string;
   user_rut?: string;

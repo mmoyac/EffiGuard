@@ -50,6 +50,12 @@ class UnidadRepository(BaseRepository[Unidad]):
                 .selectinload(Variante.producto)
                 .selectinload(Producto.family),
                 selectinload(Unidad.children).selectinload(Unidad.codigos),
+                # El plazo del kit lo acota la pieza de techo más bajo, así que
+                # cada hija necesita su variante y su familia a mano.
+                selectinload(Unidad.children)
+                .selectinload(Unidad.variante)
+                .selectinload(Variante.producto)
+                .selectinload(Producto.family),
             )
         )
         return result.scalar_one_or_none()
