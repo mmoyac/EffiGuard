@@ -146,3 +146,35 @@ export interface InventoryLog {
   fecha_hora: string;
   observaciones: string | null;
 }
+
+/**
+ * Consulta de bodega del operario.
+ * Sin precios ni valorización: el endpoint no los envía a nadie.
+ */
+export interface UbicacionBodega {
+  rack: string | null;
+  nivel: string | null;
+  posicion: string | null;
+  /** Ya viene armado, incluida la leyenda de que falta el dato. */
+  texto: string;
+  /** Ejemplares disponibles en esta posición. null en consumibles. */
+  ejemplares: number | null;
+}
+
+export interface ItemBodega {
+  variante_id: number;
+  producto_nombre: string;
+  variante_nombre: string;
+  comportamiento: string;
+  unidad: string;
+  familia_nombre: string;
+  familia_color: string | null;
+  stock: number | null;
+  unidades_total: number | null;
+  unidades_disponibles: number | null;
+  /** "240 un" o "3 de 7 disponibles", según el comportamiento. */
+  disponibilidad_texto: string;
+  hay_stock: boolean;
+  /** Nunca vacía: sin ubicación cargada trae la entrada con la leyenda. */
+  ubicaciones: UbicacionBodega[];
+}

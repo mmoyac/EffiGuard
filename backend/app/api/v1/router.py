@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import api_keys, asset_families, auth, catalog, catalogo, dashboard, import_catalogo, integraciones, inventory, loans, menu, projects, proveedores, pwa, superadmin, ubicaciones, users
+from app.api.v1 import api_keys, asset_families, auth, bodega, catalog, catalogo, dashboard, import_catalogo, integraciones, inventory, loans, menu, projects, proveedores, pwa, superadmin, ubicaciones, users
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -17,6 +17,9 @@ api_router.include_router(catalog.router)
 api_router.include_router(api_keys.router)
 api_router.include_router(superadmin.router)
 api_router.include_router(pwa.router)
+
+# Consulta de bodega: sólo lectura, sin costos, para cualquier rol del tenant.
+api_router.include_router(bodega.router)
 
 # Catálogo producto → variante → unidad. Convive con /assets mientras dura la
 # migración por tramos: éste sirve la carga, aquél sigue sirviendo préstamos,

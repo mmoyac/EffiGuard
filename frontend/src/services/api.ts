@@ -101,6 +101,14 @@ export const ubicacionesApi = {
   remove: (id: number) => api.delete(`/ubicaciones/${id}`),
 };
 
+/**
+ * Consulta de bodega: sólo lectura, sin costos.
+ * Responde "¿hay, y dónde está?" para cualquier rol del tenant.
+ */
+export const bodegaApi = {
+  buscar: (q: string) => api.get(`/bodega/buscar?q=${encodeURIComponent(q)}`),
+};
+
 export const catalogApi = {
   brands: () => api.get("/catalog/brands"),
   models: (brandId?: number) => api.get(`/catalog/models${brandId ? `?brand_id=${brandId}` : ""}`),

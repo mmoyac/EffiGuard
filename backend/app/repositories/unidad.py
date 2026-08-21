@@ -4,6 +4,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.codigo import Codigo
 from app.models.producto import Producto
+from app.models.ubicacion import Ubicacion
 from app.models.unidad import Unidad
 from app.models.variante import Variante
 from app.repositories.base import BaseRepository
@@ -66,6 +67,44 @@ class UnidadRepository(BaseRepository[Unidad]):
             .order_by(Unidad.id)
         )
         return list(result.scalars().all())
+
+    async def ubicaciones_disponibles(
+        self, variante_ids: list[int]
+    ) -> dict[int, list[tuple[str | None, str | None, str | None, int]]]:
+        """Dónde están, y cuántos hay en cada posición, los ejemplares que se pueden prestar.
+
+        Una sola query agregada para toda la página de resultados: una por fila
+        convertiría cada búsqueda de bodega en cincuenta viajes a la base.
+
+        La precedencia unidad → variante se resuelve con el `coalesce` dentro del
+        join, así que una unidad sin ubicación propia se cuenta en la repisa de su
+        variante en vez de aparecer sin ubicar.
+        """
+        if not variante_ids:
+            return {}
+
+        ubicacion_efectiva = func.coalesce(Unidad.ubicacion_id, Variante.ubicacion_id)
+        result = await self.session.execute(
+            select(
+                Unidad.variante_id,
+                Ubicacion.rack,
+                Ubicacion.nivel,
+                Ubicacion.posicion,
+                func.count().label("ejemplares"),
+            )
+            .join(Variante, Unidad.variante_id == Variante.id)
+            .outerjoin(Ubicacion, Ubicacion.id == ubicacion_efectiva)
+            .where(Unidad.tenant_id == self.tenant_id)
+            .where(Unidad.variante_id.in_(variante_ids))
+            .where(Unidad.estado_id == ESTADO_DISPONIBLE)
+            .group_by(Unidad.variante_id, Ubicacion.rack, Ubicacion.nivel, Ubicacion.posicion)
+            .order_by(Ubicacion.rack, Ubicacion.nivel, Ubicacion.posicion)
+        )
+
+        por_variante: dict[int, list[tuple[str | None, str | None, str | None, int]]] = {}
+        for variante_id, rack, nivel, posicion, ejemplares in result.all():
+            por_variante.setdefault(variante_id, []).append((rack, nivel, posicion, ejemplares))
+        return por_variante
 
     async def codigos_usados(self) -> set[str]:
         """Todos los códigos del tenant, para que el UID autogenerado no choque.

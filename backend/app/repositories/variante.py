@@ -100,6 +100,48 @@ class VarianteRepository(BaseRepository[Variante]):
         result = await self.session.execute(query)
         return [(row[0], row[1], row[2]) for row in result.all()]
 
+    async def buscar_para_bodega(
+        self, texto: str, limit: int = 50
+    ) -> list[tuple[Variante, int, int]]:
+        """Búsqueda del operario: por nombre aproximado, por código exacto.
+
+        El código se compara por igualdad y no con `like` porque un `%12%` sobre la
+        tabla de códigos devuelve medio catálogo y entierra el acierto real. El caso
+        de uso es el operario tipeando o escaneando lo impreso en la caja, que es el
+        código completo o nada.
+
+        Se buscan también los códigos de unidad —la serie de fábrica de una
+        herramienta— resolviéndolos a su variante: quien lee un número pegado a un
+        taladro no sabe de qué nivel del catálogo cuelga.
+        """
+        query, _ = self._query_con_conteos()
+        texto = texto.strip()
+        patron = f"%{texto}%"
+        codigo = texto.upper()  # los códigos se guardan normalizados
+
+        de_variante = select(Codigo.variante_id).where(
+            Codigo.tenant_id == self.tenant_id,
+            Codigo.codigo == codigo,
+            Codigo.variante_id.is_not(None),
+        )
+        de_unidad = (
+            select(Unidad.variante_id)
+            .join(Codigo, Codigo.unidad_id == Unidad.id)
+            .where(Codigo.tenant_id == self.tenant_id, Codigo.codigo == codigo)
+        )
+        por_codigo = Variante.id.in_(de_variante.union(de_unidad))
+
+        query = query.where(
+            Producto.nombre.ilike(patron) | Variante.nombre.ilike(patron) | por_codigo
+        )
+        # El acierto exacto primero: si el operario tipeó un código, es lo que busca.
+        query = query.order_by(
+            case((por_codigo, 0), else_=1), Producto.nombre, Variante.nombre
+        ).limit(limit)
+
+        result = await self.session.execute(query)
+        return [(row[0], row[1], row[2]) for row in result.all()]
+
     async def contar(
         self, comportamiento: str | None = None, producto_id: int | None = None
     ) -> int:
